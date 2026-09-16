@@ -449,8 +449,9 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  var NAMES={intro:"I joined Aflac",life_moment:"Thought of you",nudge:"Here is my link",why_cancer:"Why cancer coverage"};
  function ordered(sg){return [sg].concat(ORDER.filter(function(k){return k!==sg}))}
 
- function emailText(e,c){var L=[fill("Hi [First name],",c),"",fill(e.body,c),"",KIT.list_label];KIT.products.forEach(function(p){L.push(p.label+" "+p.text)});L.push("",e.cta+": "+link(),"",fill(e.closing,c),"",e.signoff,AGENT(),"");KIT.email_disclosure.forEach(function(d){L.push(d)});L.push("",e.z+"   "+e.exp,fill(KIT.email_footer_tail,c),"Unsubscribe");return L.join("\n")}
- function emailHTMLKit(e,c){var h=KIT_TPL.split("{{EYEBROW}}").join(esc(e.eyebrow)).split("{{HEADLINE}}").join(esc(e.headline)).split("{{BODY}}").join(esc(e.body)).split("{{CTA}}").join(esc(e.cta)).split("{{CLOSING}}").join(esc(e.closing)).split("{{SIGNOFF}}").join(esc(e.signoff)).split("{{Z}}").join(e.z).split("{{EXP}}").join(e.exp);return fillH(h,c)}
+ function unsubUrl(c){return (c&&c.unsub_token)?"https://pytbtuzeeguqgrhszmpr.functions.supabase.co/unsub?t="+c.unsub_token:""}
+ function emailText(e,c){var L=[fill("Hi [First name],",c),"",fill(e.body,c),"",KIT.list_label];KIT.products.forEach(function(p){L.push(p.label+" "+p.text)});L.push("",e.cta+": "+link(),"",fill(e.closing,c),"",e.signoff,AGENT(),"");KIT.email_disclosure.forEach(function(d){L.push(d)});L.push("",e.z+"   "+e.exp,fill(KIT.email_footer_tail,c),unsubUrl(c)?"Unsubscribe: "+unsubUrl(c):"Unsubscribe");return L.join("\n")}
+ function emailHTMLKit(e,c){var h=KIT_TPL.split("{{EYEBROW}}").join(esc(e.eyebrow)).split("{{HEADLINE}}").join(esc(e.headline)).split("{{BODY}}").join(esc(e.body)).split("{{CTA}}").join(esc(e.cta)).split("{{CLOSING}}").join(esc(e.closing)).split("{{SIGNOFF}}").join(esc(e.signoff)).split("{{Z}}").join(e.z).split("{{EXP}}").join(e.exp);h=fillH(h,c);var u=unsubUrl(c);if(u)h=h.split('href="#" style="color:#0070A9;">Unsubscribe').join('href="'+esc(u)+'" style="color:#0070A9;">Unsubscribe');return h}
  function emailDoc(e,c){return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>'+esc(e.subject)+'</title></head><body style="margin:0;padding:0;background:#F5FAFD;">'+emailHTMLKit(e,c)+'</body></html>'}
  function smsText(t,c){return fill(t.body,c)+"\n"+t.footer.join("\n")+"\n"+t.z+" "+t.exp}
  function capText(cp){var L=cp.lines.slice();L.push(cp.closing);if(cp.z)L.push(cp.z+" "+cp.exp);return fill(L.join("\n"),{})}
@@ -473,7 +474,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function addrBox(){var a=addr();return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#fafcfe"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">YOUR BUSINESS MAILING ADDRESS (required in the email footer)</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="kit_addr" value="'+esc(a)+'" placeholder="Street, City, ST ZIP" style="flex:1;min-width:220px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit"><button class="btn sm" style="height:36px" onclick="kitSetAddr(document.getElementById(&#39;kit_addr&#39;).value)">Save</button></div></div>'}
 
  function renderKit(ch,c,sg){RENDERED[ch]=[];var out='<div class="designs">';
-  if(ch==="Email"){ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});out+=card(NAMES[k]+" ("+e.z+")",'<div style="background:#F5FAFD;padding:10px;overflow:auto">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
+  if(ch==="Email"){if(c&&c.unsubscribed_at){return out+'<div class="card2" style="padding:16px"><b>'+esc(c.first||"This contact")+' unsubscribed from email.</b> Text and social pieces are still available.</div></div>'}ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});out+=card(NAMES[k]+" ("+e.z+")",'<div style="background:#F5FAFD;padding:10px;overflow:auto">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
   else if(ch==="Text"){var list=ordered(sg.text).map(function(k){return{k:k,t:KIT.texts[k],lab:NAMES[k]}}).concat(["why_cancer","life_moment","nudge"].map(function(k){return{k:k,t:KIT.cancer_texts[k],lab:"Cancer kit: "+NAMES[k]}}));list.forEach(function(x,i){var body=smsText(x.t,c);RENDERED[ch].push({subject:x.lab,body:body,url:link(),tel:c.phone||""});out+=card(x.lab+" ("+x.t.z+")",'<div style="padding:6px 0">'+smsHTML(body,c)+'</div>',shareRow(ch,i),i===0)})}
   else{var caps=[["general","facebook","Facebook post"],["general","instagram","Instagram post"],["cancer","facebook","Cancer kit: Facebook post"],["cancer","instagram","Cancer kit: Instagram post"]];caps.forEach(function(x,i){var cp=KIT.captions[x[0]][x[1]],img=KIT.images[x[0]+"_"+x[1]],body=capText(cp);RENDERED[ch].push({subject:x[2],body:body,url:link(),img:img});out+=card(x[2]+(cp.z?" ("+cp.z+")":" (form number pending)"),'<div style="padding:12px 14px"><img src="'+img+'" alt="" style="width:100%;max-width:360px;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:10px" onerror="this.style.display=&#39;none&#39;"><pre style="white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.5;margin:0;color:#1D1D1F">'+esc(body)+'</pre></div>',shareRow(ch,i),false)})}
   return out+'</div>'}
@@ -553,6 +554,142 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  var od0=openDrawer;
  window.openDrawer=function(i){od0(i);var ta=$("d_notes");if(ta){ta.style.display="none";var lab=ta.previousElementSibling;if(lab&&lab.tagName==="LABEL")lab.style.display="none"}var g=document.querySelector("#drawer .guard");if(g)g.style.display="none";try{genForContact()}catch(e){}};
  function boot(){trimSteps();wireImport();var tu=$("topurl");if(tu)tu.textContent=linkLabel();var coiLead=document.querySelector("#st4 .lead");if(coiLead&&/generate/i.test(coiLead.textContent))coiLead.textContent="Double click anyone to send them approved outreach by email, text or post.";var b=$("d_gen");if(b)b.textContent="Refresh";var g=b&&b.closest(".actions")&&b.closest(".actions").previousElementSibling;if(g&&/medical claims/.test(g.textContent))g.innerHTML="Every piece below is <b>Compliance approved</b> and used as written. Emails carry the full disclosure block and form number. Texts carry the opt out line where Compliance placed it. Only your link, the first name, your name and your mailing address are filled in.";}
+ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
+})();
+
+/* Cloud layer for the Outreach Studio. Loaded after kit-overrides.js.
+   Real sign in (Supabase Auth, email plus one time code), per agent data in Postgres with row level security,
+   contact sync with an offline cache, a send log, a contacts bridge and a version gate. Built 2026-09-16.
+   The only key in this file is the publishable client key, which is meant for browser code. */
+(function(){
+ var SB_URL="https://pytbtuzeeguqgrhszmpr.supabase.co";
+ var SB_KEY="sb_publishable_Szeto_ZZUnpZipwMv1VE0A_wyo3RMQp";
+ var BUILD=2;
+ var LINK_KEY="kit_link",ADDR_KEY="kit_addr";
+ var sb=null,user=null,agent=null,known={},syncTimer=null,syncBusy=false,syncAgain=false,pendingEmail="";
+ function $(id){return document.getElementById(id)}
+ function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
+ function msg(t,bad){var m=$("cl_msg");if(m){m.textContent=t||"";m.style.color=bad?"#B3261E":""}}
+ function busy(id,on,label){var b=$(id);if(!b)return;b.disabled=!!on;if(label)b.textContent=label}
+ function lib(cb){if(window.supabase&&window.supabase.createClient)return cb(true);var s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js";s.onload=function(){cb(true)};s.onerror=function(){cb(false)};document.head.appendChild(s)}
+
+ /* ---------- sign in screen ---------- */
+ function show(step){["cl_step1","cl_step2","cl_step3"].forEach(function(id){var e=$(id);if(e)e.style.display=id===step?"":"none"});msg("")}
+ function buildLogin(){var box=document.querySelector("#login .box");if(!box)return;var logo=box.querySelector(".bm");var lh=logo?logo.outerHTML:"";
+  var ico='<svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6675" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>';
+  var key='<svg class="i" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#5B6675" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>';
+  box.innerHTML=lh+'<h2>Sign in</h2><p class="sub2">Use the email address Aflac has on file for you. We will send a one time code.</p>'
+  +'<div id="cl_step1"><div class="fgrp"><label class="fl">Email</label><div class="lin">'+ico+'<input id="cl_email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></div></div>'
+  +'<button class="btn" id="cl_send" style="width:100%;height:50px;font-size:16px" onclick="cloudSendCode()">Send code</button></div>'
+  +'<div id="cl_step2" style="display:none"><div class="fgrp"><label class="fl">6 digit code</label><div class="lin">'+key+'<input id="cl_code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456"></div></div>'
+  +'<button class="btn" id="cl_verify" style="width:100%;height:50px;font-size:16px" onclick="cloudVerify()">Sign in</button>'
+  +'<p class="muted" style="font-size:12.5px;text-align:center;margin-top:14px">Check your email for the code, or tap the sign in link in that email. <a href="#" onclick="cloudBack();return false" style="color:#0070A9">Use a different email</a></p></div>'
+  +'<div id="cl_step3" style="display:none"><div class="fgrp"><label class="fl">Your name, as it should appear in your emails and texts</label><div class="lin"><input id="cl_name" type="text" autocomplete="name" placeholder="First Last"></div></div>'
+  +'<button class="btn" id="cl_namebtn" style="width:100%;height:50px;font-size:16px" onclick="cloudSaveName()">Continue</button></div>'
+  +'<p id="cl_msg" class="muted" style="font-size:13px;text-align:center;margin-top:14px;min-height:18px"></p>';
+  var e=$("cl_email");if(e){try{e.value=localStorage.getItem("cl_email")||""}catch(x){}e.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudSendCode()})}
+  var c=$("cl_code");if(c)c.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudVerify()});
+  var n=$("cl_name");if(n)n.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudSaveName()});
+  var foot=document.querySelector("#login .pane p.muted:last-child");if(foot&&/Prototype/.test(foot.textContent))foot.remove()}
+ function friendly(err){var m=(err&&err.message)||String(err||"");
+  if(/not_allowlisted|Database error saving new user|saving new user/i.test(m))return "This email is not on the pilot list yet. Ask your MKD or MKT to add you, then try again.";
+  if(/rate limit|too many/i.test(m))return "Too many attempts. Wait a minute and try again.";
+  if(/expired|invalid|Token has expired/i.test(m))return "That code did not match or has expired. Send a new code.";
+  if(/network|fetch/i.test(m))return "No connection. Check your signal and try again.";
+  return m||"Something went wrong. Try again."}
+ window.cloudBack=function(){show("cl_step1")};
+ window.cloudSendCode=async function(){if(!sb){msg("Still loading. Try again in a moment.",true);return}var e=($("cl_email").value||"").trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){msg("Enter a valid email address.",true);return}
+  busy("cl_send",true,"Sending");msg("");
+  try{var r=await sb.auth.signInWithOtp({email:e,options:{shouldCreateUser:true,emailRedirectTo:location.origin+location.pathname}});if(r.error)throw r.error;pendingEmail=e;try{localStorage.setItem("cl_email",e)}catch(x){}show("cl_step2");msg("Code sent to "+e+".");var c=$("cl_code");if(c){c.value="";c.focus()}}
+  catch(err){msg(friendly(err),true)}
+  busy("cl_send",false,"Send code")};
+ window.cloudVerify=async function(){var code=($("cl_code").value||"").replace(/\D/g,"");if(code.length<6){msg("Enter the 6 digit code from your email.",true);return}
+  busy("cl_verify",true,"Signing in");msg("");
+  try{var r=await sb.auth.verifyOtp({email:pendingEmail,token:code,type:"email"});if(r.error)throw r.error;/* onAuthStateChange takes it from here */}
+  catch(err){msg(friendly(err),true);busy("cl_verify",false,"Sign in")}};
+ window.cloudSaveName=async function(){var n=($("cl_name").value||"").trim();if(n.length<2){msg("Enter your name.",true);return}busy("cl_namebtn",true,"Saving");
+  try{var r=await sb.from("to_agents").update({name:n}).eq("id",user.id).select().single();if(r.error)throw r.error;agent=r.data;await proceed()}
+  catch(err){msg(friendly(err),true);busy("cl_namebtn",false,"Continue")}};
+ window.cloudSignOut=async function(){try{await sb.auth.signOut()}catch(e){}try{localStorage.removeItem(LINK_KEY);localStorage.removeItem(ADDR_KEY)}catch(e){}location.href=location.pathname};
+
+ /* ---------- session and agent record ---------- */
+ async function enter(u){if(user)return;user=u;msg("Signed in. Loading your studio.");
+  try{var r=await sb.from("to_agents").select("*").eq("id",u.id).maybeSingle();if(r.error)throw r.error;agent=r.data;
+   if(!agent){var ins=await sb.from("to_agents").insert({id:u.id,email:u.email||"",name:""}).select().single();if(ins.error)throw ins.error;agent=ins.data}}
+  catch(err){user=null;msg(friendly(err),true);busy("cl_verify",false,"Sign in");return}
+  if(!agent.name){show("cl_step3");var n=$("cl_name");if(n)n.focus();return}
+  await proceed()}
+ function cacheKey(){return "cl_contacts_"+(user?user.id:"")}
+ function toLocal(row){return {id:row.id,first:row.first_name||"",last:row.last_name||"",email:row.email||"",phone:row.phone||"",rel:row.rel||"",social:row.social||[],notes:"",unsub_token:row.unsub_token||"",unsubscribed_at:row.unsubscribed_at||null}}
+ async function proceed(){window.AGENTNAME=agent.name;
+  try{var ll=localStorage.getItem(LINK_KEY)||"",la=localStorage.getItem(ADDR_KEY)||"";
+   if(agent.link)localStorage.setItem(LINK_KEY,agent.link);if(agent.mailing_address)localStorage.setItem(ADDR_KEY,agent.mailing_address);
+   if((!agent.link&&ll)||(!agent.mailing_address&&la))savePrefsRemote()}catch(e){}
+  st.url=agent.slug||"";
+  known={};var rows=null;
+  try{var r=await sb.from("to_contacts").select("*").eq("agent_id",user.id).order("created_at");if(r.error)throw r.error;rows=r.data||[];try{localStorage.setItem(cacheKey(),JSON.stringify(rows))}catch(e){}}
+  catch(err){try{rows=JSON.parse(localStorage.getItem(cacheKey())||"null")}catch(e){rows=null}if(rows)toast("Offline. Showing your saved contacts.")}
+  if(rows){st.contacts=rows.map(toLocal);rows.forEach(function(x){known[x.id]=1})}
+  login();
+  try{rc0()}catch(e){}
+  if(agent.link&&st.contacts.length){var t=$("tabnav");if(t)t.style.display="flex";showTab("outreach")}
+  checkVersion()}
+
+ /* ---------- prefs go to the agent row, not Airtable ---------- */
+ window.loadPrefsRemote=async function(){};
+ window.loadDam=async function(){};
+ window.savePrefsRemote=async function(){if(!sb||!user)return;var link="",addr="";try{link=localStorage.getItem(LINK_KEY)||"";addr=localStorage.getItem(ADDR_KEY)||""}catch(e){}
+  var m=(link.match(/externalReferenceId=([A-Za-z0-9_-]+)/)||[])[1];var slug=st.url||(m?m.toLowerCase():"");
+  try{var r=await sb.from("to_agents").update({link:link,mailing_address:addr,slug:slug,name:window.AGENTNAME||agent.name}).eq("id",user.id).select().single();if(!r.error&&r.data)agent=r.data}catch(e){}};
+
+ /* ---------- contact sync ---------- */
+ var rc0=window.renderContacts;
+ window.renderContacts=function(){rc0();scheduleSync()};
+ function scheduleSync(){if(!user)return;clearTimeout(syncTimer);syncTimer=setTimeout(syncContacts,400)}
+ async function syncContacts(){if(!sb||!user)return;if(syncBusy){syncAgain=true;return}syncBusy=true;
+  try{var add=st.contacts.filter(function(c){return !c.id});
+   if(add.length){var rows=add.map(function(c){return {agent_id:user.id,first_name:c.first||"",last_name:c.last||"",email:c.email||"",phone:c.phone||"",rel:c.rel||"",social:c.social||[],source:c.source||"import"}});
+    var r=await sb.from("to_contacts").insert(rows).select();if(r.error)throw r.error;(r.data||[]).forEach(function(row,i){if(add[i]){add[i].id=row.id;add[i].unsub_token=row.unsub_token;known[row.id]=1}})}
+   var have={};st.contacts.forEach(function(c){if(c.id)have[c.id]=1});var gone=Object.keys(known).filter(function(id){return !have[id]});
+   if(gone.length){var d=await sb.from("to_contacts").delete().in("id",gone);if(d.error)throw d.error;gone.forEach(function(id){delete known[id]})}
+   try{localStorage.setItem(cacheKey(),JSON.stringify(st.contacts.map(function(c){return {id:c.id,first_name:c.first,last_name:c.last,email:c.email,phone:c.phone,rel:c.rel,social:c.social,unsub_token:c.unsub_token,unsubscribed_at:c.unsubscribed_at}})))}catch(e){}}
+  catch(err){toast("Could not save contacts. They will sync when you are back online.")}
+  syncBusy=false;if(syncAgain){syncAgain=false;scheduleSync()}}
+ var ls0=window.loadSample;
+ window.loadSample=function(){var before=st.contacts.length;ls0();for(var i=before;i<st.contacts.length;i++)st.contacts[i].source="sample"};
+
+ /* ---------- send log ---------- */
+ function logSend(ch,act,i){if(!sb||!user)return;var d=(RENDERED[ch]||[])[i]||{};var c=st.cur!==null&&st.cur!==undefined?st.contacts[st.cur]:null;var z=((d.body||"").match(/Z26\d{5}[A-Z]?/)||[])[0]||"";
+  try{sb.from("to_sends").insert({agent_id:user.id,contact_id:c&&c.id?c.id:null,channel:ch,action:act,piece:(d.subject||"").slice(0,120),z_number:z}).then(function(){})}catch(e){}}
+ var sh1=window.sh;
+ window.sh=function(ch,act,i){if(/^(gmail|outlook|sms|html|copy|ig|fb|img)$/.test(act))logSend(ch,act,i);return sh1(ch,act,i)};
+ window.saveMsg=function(btn,ch,i){btn.textContent="Logged";btn.classList.add("done");logSend(ch,"save",i);toast("Logged")};
+
+ /* ---------- contacts bridge: one interface, three ways in ---------- */
+ window.Contacts={
+  available:function(){if(window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Contacts)return "native";if(navigator.contacts&&navigator.contacts.select)return "web";return "file"},
+  pick:function(){var how=this.available();if(how==="native"){toast("Native contacts arrive with the app build.");return}if(how==="web"){pickContacts();return}var f=$("file");if(f)f.click()}
+ };
+ function wireBridge(){var pb=$("pickBtn");if(pb){var how=Contacts.available();pb.style.display=how==="file"?"none":"";pb.textContent="Add from contacts";pb.onclick=function(){Contacts.pick()}}}
+
+ /* ---------- account tab ---------- */
+ var ra1=window.renderAccountTab;
+ window.renderAccountTab=function(){ra1();var t=$("tabAccount");if(!t||!user)return;
+  t.insertAdjacentHTML("beforeend",'<div class="card" style="padding:22px;max-width:660px;margin-top:18px"><h3 style="margin:0 0 10px;font-family:Sora,sans-serif;font-size:16px">Your account</h3>'
+  +'<div class="help" style="margin-bottom:10px">Signed in as '+esc(user.email)+'</div>'
+  +'<label class="fl">Your name (appears in every email and text)</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><input id="cl_name2" value="'+esc(window.AGENTNAME||"")+'" style="flex:1;min-width:200px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit"><button class="btn sm" style="height:36px" onclick="cloudRename()">Save</button></div>'
+  +'<button class="btn ghost sm" onclick="cloudSignOut()">Sign out</button></div>')};
+ window.cloudRename=async function(){var n=($("cl_name2").value||"").trim();if(n.length<2){toast("Enter your name");return}window.AGENTNAME=n;await savePrefsRemote();toast("Name saved")};
+
+ /* ---------- version gate ---------- */
+ async function checkVersion(){try{var r=await sb.from("to_settings").select("value").eq("key","min_version").maybeSingle();var min=parseInt((r.data&&r.data.value)||"0",10);if(min>BUILD){var o=document.createElement("div");o.style.cssText="position:fixed;inset:0;background:rgba(28,36,48,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";o.innerHTML='<div style="background:#fff;border-radius:14px;padding:28px;max-width:420px;text-align:center"><h3 style="margin:0 0 8px;font-family:Sora,sans-serif">Update available</h3><p style="margin:0 0 16px">A newer version of the studio is ready. Reload to continue.</p><button class="btn" onclick="location.href=location.pathname+&#39;?v=&#39;+Date.now()">Reload</button></div>';document.body.appendChild(o)}}catch(e){}}
+
+ /* ---------- boot ---------- */
+ function boot(){buildLogin();wireBridge();
+  lib(function(ok){if(!ok){msg("Could not load the sign in service. Check your connection and reload.",true);return}
+   sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
+   sb.auth.onAuthStateChange(function(ev,session){if(session&&session.user&&!user){if(location.hash&&/access_token|type=/.test(location.hash))history.replaceState(null,"",location.pathname+location.search);enter(session.user)}});
+   sb.auth.getSession().then(function(r){if(r.data&&r.data.session&&r.data.session.user)enter(r.data.session.user)})})}
  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
 })();
 

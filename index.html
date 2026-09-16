@@ -473,8 +473,8 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function addrBox(){var a=addr();return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#fafcfe"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">YOUR BUSINESS MAILING ADDRESS (required in the email footer)</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="kit_addr" value="'+esc(a)+'" placeholder="Street, City, ST ZIP" style="flex:1;min-width:220px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit"><button class="btn sm" style="height:36px" onclick="kitSetAddr(document.getElementById(&#39;kit_addr&#39;).value)">Save</button></div></div>'}
 
  function renderKit(ch,c,sg){RENDERED[ch]=[];var out='<div class="designs">';
-  if(ch==="Email"){ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c)});out+=card(NAMES[k]+" ("+e.z+")",'<div style="background:#F5FAFD;padding:10px;overflow:auto">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
-  else if(ch==="Text"){var list=ordered(sg.text).map(function(k){return{k:k,t:KIT.texts[k],lab:NAMES[k]}}).concat(["why_cancer","life_moment","nudge"].map(function(k){return{k:k,t:KIT.cancer_texts[k],lab:"Cancer kit: "+NAMES[k]}}));list.forEach(function(x,i){var body=smsText(x.t,c);RENDERED[ch].push({subject:x.lab,body:body,url:link()});out+=card(x.lab+" ("+x.t.z+")",'<div style="padding:6px 0">'+smsHTML(body,c)+'</div>',shareRow(ch,i),i===0)})}
+  if(ch==="Email"){ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});out+=card(NAMES[k]+" ("+e.z+")",'<div style="background:#F5FAFD;padding:10px;overflow:auto">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
+  else if(ch==="Text"){var list=ordered(sg.text).map(function(k){return{k:k,t:KIT.texts[k],lab:NAMES[k]}}).concat(["why_cancer","life_moment","nudge"].map(function(k){return{k:k,t:KIT.cancer_texts[k],lab:"Cancer kit: "+NAMES[k]}}));list.forEach(function(x,i){var body=smsText(x.t,c);RENDERED[ch].push({subject:x.lab,body:body,url:link(),tel:c.phone||""});out+=card(x.lab+" ("+x.t.z+")",'<div style="padding:6px 0">'+smsHTML(body,c)+'</div>',shareRow(ch,i),i===0)})}
   else{var caps=[["general","facebook","Facebook post"],["general","instagram","Instagram post"],["cancer","facebook","Cancer kit: Facebook post"],["cancer","instagram","Cancer kit: Instagram post"]];caps.forEach(function(x,i){var cp=KIT.captions[x[0]][x[1]],img=KIT.images[x[0]+"_"+x[1]],body=capText(cp);RENDERED[ch].push({subject:x[2],body:body,url:link(),img:img});out+=card(x[2]+(cp.z?" ("+cp.z+")":" (form number pending)"),'<div style="padding:12px 14px"><img src="'+img+'" alt="" style="width:100%;max-width:360px;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:10px" onerror="this.style.display=&#39;none&#39;"><pre style="white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.5;margin:0;color:#1D1D1F">'+esc(body)+'</pre></div>',shareRow(ch,i),false)})}
   return out+'</div>'}
 
@@ -483,8 +483,21 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   else if(ch==="Text")b+=sbtn("Send as text",ch,"sms",i)+sbtn("Copy",ch,"copy",i);
   else b+=sbtn("Instagram",ch,"ig",i)+sbtn("Facebook",ch,"fb",i)+sbtn("Copy caption",ch,"copy",i)+sbtn("Download image",ch,"img",i);
   return b+'</div>'};
+ function isIOS(){return /iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent))}
+ function isMobile(){return isIOS()||/Android/i.test(navigator.userAgent)}
+ function mailtoUrl(to,su,body){return "mailto:"+encodeURIComponent(to||"")+"?subject="+encodeURIComponent(su||"")+"&body="+encodeURIComponent(body||"")}
+ function openApp(appUrl,fallbackUrl){var t=Date.now();location.href=appUrl;setTimeout(function(){if(Date.now()-t<2000&&!document.hidden)location.href=fallbackUrl},1300)}
+ function openMail(kind,to,su,body){
+  if(!isMobile()){if(kind==="gmail")openL("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(to||"")+"&su="+encodeURIComponent(su||"")+"&body="+encodeURIComponent(body||""));else openL("https://outlook.office.com/mail/deeplink/compose?to="+encodeURIComponent(to||"")+"&subject="+encodeURIComponent(su||"")+"&body="+encodeURIComponent(body||""));return}
+  var mt=mailtoUrl(to,su,body);
+  if(isIOS()){var q="to="+encodeURIComponent(to||"")+"&subject="+encodeURIComponent(su||"")+"&body="+encodeURIComponent(body||"");openApp(kind==="gmail"?"googlegmail://co?"+q:"ms-outlook://compose?"+q,mt);return}
+  location.href=mt}
+ function smsTo(tel,body){var d=String(tel||"").replace(/\D/g,"");if(d.length===10)d="1"+d;return "sms:"+(d?"+"+d:"")+"?&body="+encodeURIComponent(body||"")}
  var sh0=sh;
  window.sh=function(ch,act,i){var d=(RENDERED[ch]||[])[i];if(!d)return;
+  if(act==="gmail"){openMail("gmail",d.to,d.subject,d.body);return}
+  if(act==="outlook"){openMail("outlook",d.to,d.subject,d.body);return}
+  if(act==="sms"){location.href=smsTo(d.tel,d.body);return}
   if(act==="html"){try{navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([d.html],{type:"text/html"}),"text/plain":new Blob([d.body],{type:"text/plain"})})]).then(function(){toast("Formatted email copied. Paste into a new Gmail or Outlook message.")},function(){window.__copy(d.body)})}catch(e){window.__copy(d.body)}return}
   if(act==="img"){if(!d.img)return;var a=document.createElement("a");a.href=d.img;a.download=d.img.split("/").pop();document.body.appendChild(a);a.click();a.remove();return}
   return sh0(ch,act,i)};

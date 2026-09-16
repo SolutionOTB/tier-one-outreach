@@ -243,10 +243,9 @@ h2.t{font-family:Sora,sans-serif;font-size:31px;letter-spacing:-.025em;margin:0 
  </div>
 
  <div class="wrap scr" id="st3">
-  <div class="hero"><div id="ill3"></div><div><h2 class="t">Claim your unique link</h2><p class="lead">Every message you send carries this link, so opens and clicks track back to you.</p></div></div>
-  <div class="card" style="padding:26px;max-width:580px"><label class="fl">Your link</label><div style="display:flex;align-items:center;border:1px solid var(--line);border-radius:var(--rs);overflow:hidden"><span style="padding:12px 13px;background:#f3f6fa;color:var(--muted);font-size:14px;white-space:nowrap">go.tieronedirect.com/</span><input id="slug" style="border:none;border-radius:0" placeholder="chris" autocomplete="off" oninput="prevSlug()"></div><div class="help" style="margin-top:12px">Preview: <b id="slugprev" style="color:var(--blue-d)">go.tieronedirect.com/—</b></div><div class="actions" style="margin-top:22px"><button class="btn ghost" onclick="goStep(2)">Back</button><button class="btn" onclick="finish()">Finish setup</button></div></div>
+  <div class="hero"><div id="ill3"></div><div><h2 class="t">Your unique link</h2><p class="lead">Paste the link from your Fast Track onboarding email, or scan its QR code. Every email, text and post you send carries it.</p></div></div>
+  <div class="card" style="padding:26px;max-width:640px"><label class="fl">Your link</label><input id="slug" type="url" placeholder="https://buy.aflac.com/partnerCampaign/..." autocomplete="off" style="display:none"><div id="st3link"></div><div class="actions" style="margin-top:22px"><button class="btn ghost" onclick="goStep(2)">Back</button><button class="btn" onclick="finish()">Finish setup</button></div></div>
  </div>
-
  <div class="wrap scr" id="st4">
   <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px"><div class="hero" style="margin:0"><div id="ill4"></div><div><h2 class="t">Your center of influence</h2><p class="lead" style="margin:0">Double click anyone to send them approved outreach by email, text or post.</p></div></div><button class="btn ghost sm" onclick="goStep(2)">+ Add more</button></div>
   <div class="hr"></div><div class="coi" id="coi"></div>
@@ -433,7 +432,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function hasLink(){return link()!==KIT.link}
  function linkLabel(){var l=link().replace(/^https?:\/\//,"").replace(/\/$/,"");if(l.length<=44)return l;var m=l.match(/externalReferenceId=([^&]+)/);return l.split("/")[0]+"/\u2026"+(m?"?externalReferenceId="+m[1]:l.slice(-18))}
  function pushPrefs(){try{st.aesthetic.link=hasLink()?link():"";st.aesthetic.addr=addr();savePrefsRemote()}catch(e){}}
- function refreshViews(){var t=$("topurl");if(t)t.textContent=linkLabel();if($("d_out")&&$("d_out").innerHTML&&st.cur!==null)genForContact();if($("tabShare")&&$("tabShare").innerHTML)renderShareTab()}
+ function refreshViews(){var t=$("topurl");if(t)t.textContent=linkLabel();var b3=$("st3link");if(b3&&b3.innerHTML)b3.innerHTML=linkBox().replace("margin-bottom:14px","margin-bottom:0");if($("d_out")&&$("d_out").innerHTML&&st.cur!==null)genForContact();if($("tabShare")&&$("tabShare").innerHTML)renderShareTab()}
  window.kitSetAddr=function(v){try{localStorage.setItem(ADDR_KEY,(v||"").trim())}catch(e){}pushPrefs();toast("Address saved");refreshViews()};
  window.kitSetLink=function(v){v=(v||"").trim();if(v&&!/^https?:\/\//i.test(v))v="https://"+v;if(v&&!/^https?:\/\/[^\s]+\.[^\s]+/i.test(v)){toast("That does not look like a link");return}try{if(v)localStorage.setItem(LINK_KEY,v);else localStorage.removeItem(LINK_KEY)}catch(e){}pushPrefs();toast(v?"Your link is saved. Every piece now uses it.":"Link cleared. Pieces use buy.aflac.com until you add yours.");refreshViews()};
  function fill(s,c){var f=(c&&c.first)||"[First name]",a=addr()||"[Your business mailing address]";return String(s).split("[First name]").join(f).split("{{YOUR_NAME}}").join(AGENT()).split("[Your business mailing address]").join(a).split(KIT.link).join(link())}
@@ -507,8 +506,10 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   else if(act==="li")openL(liUrl(url));
   else if(act==="fb"){window.__copy(capText(KIT.captions.general.facebook));toast("Approved caption copied. Paste into Facebook.");openL("https://www.facebook.com/");}
   else copyLink();};
- var fin0=finish;
- window.finish=function(){fin0();var t=$("topurl");if(t)t.textContent=linkLabel()};
+ window.prevSlug=function(){};
+ window.finish=function(){var kl=$("kit_link");if(kl&&kl.value.trim()&&kl.value.trim()!==link()){kitSetLink(kl.value)}var m=(link().match(/externalReferenceId=([A-Za-z0-9_-]+)/)||[])[1];var v=(m||AGENT()||"chris").toLowerCase().replace(/[^a-z0-9-]/g,"")||"chris";st.url=v;var t=$("topurl");if(t)t.textContent=linkLabel();$("tabnav").style.display="flex";try{savePrefsRemote()}catch(e){}showTab("outreach")};
+ var gs0=goStep;
+ window.goStep=function(n){gs0(n);if(n===3){var box=$("st3link");if(box)box.innerHTML=linkBox().replace('margin-bottom:14px','margin-bottom:0')}};
  var rs0=renderShareTab;
  window.renderShareTab=function(){rs0();var h=$("tabShare").querySelector(".hero");if(h)h.insertAdjacentHTML("afterend",linkBox())};
  var lp0=loadPrefsRemote;

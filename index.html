@@ -581,6 +581,8 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  var SB_KEY="sb_publishable_Szeto_ZZUnpZipwMv1VE0A_wyo3RMQp";
  var BUILD=2;
  var LINK_KEY="kit_link",ADDR_KEY="kit_addr";
+ var SITE_URL="https://outreach.benefitsotb.com/";
+ function isApp(){var C=window.Capacitor;return !!(C&&C.isNativePlatform&&C.isNativePlatform())}
  var sb=null,user=null,agent=null,known={},syncTimer=null,syncBusy=false,syncAgain=false,pendingEmail="";
  function $(id){return document.getElementById(id)}
  function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")}
@@ -596,14 +598,16 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   box.innerHTML=lh+'<h2>Sign in</h2><p class="sub2">Use the email address Aflac has on file for you. We will send a one time code.</p>'
   +'<div id="cl_step1"><div class="fgrp"><label class="fl">Email</label><div class="lin">'+ico+'<input id="cl_email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></div></div>'
   +'<button class="btn" id="cl_send" style="width:100%;height:50px;font-size:16px" onclick="cloudSendCode()">Send code</button></div>'
-  +'<div id="cl_step2" style="display:none"><div class="fgrp"><label class="fl">6 digit code</label><div class="lin">'+key+'<input id="cl_code" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="123456"></div></div>'
+  +'<div id="cl_step2" style="display:none"><div class="fgrp"><label class="fl">6 digit code</label><div class="lin">'+key+'<input id="cl_code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" placeholder="123456"></div></div>'
   +'<button class="btn" id="cl_verify" style="width:100%;height:50px;font-size:16px" onclick="cloudVerify()">Sign in</button>'
-  +'<p class="muted" style="font-size:12.5px;text-align:center;margin-top:14px">Check your email for the code, or tap the sign in link in that email. <a href="#" onclick="cloudBack();return false" style="color:#0070A9">Use a different email</a></p></div>'
+  +'<p class="muted" style="font-size:12.5px;text-align:center;margin-top:14px">'+(isApp()?'Enter the 6 digit code from your email. ':'Check your email for the code, or tap the sign in link in that email. ')+'<a href="#" onclick="cloudBack();return false" style="color:#0070A9">Use a different email</a></p></div>'
   +'<div id="cl_step3" style="display:none"><div class="fgrp"><label class="fl">Your name, as it should appear in your emails and texts</label><div class="lin"><input id="cl_name" type="text" autocomplete="name" placeholder="First Last"></div></div>'
   +'<button class="btn" id="cl_namebtn" style="width:100%;height:50px;font-size:16px" onclick="cloudSaveName()">Continue</button></div>'
   +'<p id="cl_msg" class="muted" style="font-size:13px;text-align:center;margin-top:14px;min-height:18px"></p>';
   var e=$("cl_email");if(e){try{e.value=localStorage.getItem("cl_email")||""}catch(x){}e.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudSendCode()})}
-  var c=$("cl_code");if(c)c.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudVerify()});
+  var c=$("cl_code");if(c){c.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudVerify()});
+  var lastAuto="";c.addEventListener("input",function(){var v=(c.value||"").replace(/\D/g,"");if(v!==c.value)c.value=v;
+   if(v.length===6&&v!==lastAuto){lastAuto=v;cloudVerify()}})}
   var n=$("cl_name");if(n)n.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudSaveName()});
   var foot=document.querySelector("#login .pane p.muted:last-child");if(foot&&/Prototype/.test(foot.textContent))foot.remove()}
  function friendly(err){var m=(err&&err.message)||String(err||"");
@@ -615,10 +619,10 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  window.cloudBack=function(){show("cl_step1")};
  window.cloudSendCode=async function(){if(!sb){msg("Still loading. Try again in a moment.",true);return}var e=($("cl_email").value||"").trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){msg("Enter a valid email address.",true);return}
   busy("cl_send",true,"Sending");msg("");
-  try{var r=await sb.auth.signInWithOtp({email:e,options:{shouldCreateUser:true,emailRedirectTo:location.origin+location.pathname}});if(r.error)throw r.error;pendingEmail=e;try{localStorage.setItem("cl_email",e)}catch(x){}show("cl_step2");msg("Code sent to "+e+".");var c=$("cl_code");if(c){c.value="";c.focus()}}
+  try{var r=await sb.auth.signInWithOtp({email:e,options:{shouldCreateUser:true,emailRedirectTo:isApp()?SITE_URL:location.origin+location.pathname}});if(r.error)throw r.error;pendingEmail=e;try{localStorage.setItem("cl_email",e)}catch(x){}show("cl_step2");msg("Code sent to "+e+".");var c=$("cl_code");if(c){c.value="";c.focus()}}
   catch(err){msg(friendly(err),true)}
   busy("cl_send",false,"Send code")};
- window.cloudVerify=async function(){var code=($("cl_code").value||"").replace(/\D/g,"");if(code.length<6){msg("Enter the 6 digit code from your email.",true);return}
+ window.cloudVerify=async function(){var vb=$("cl_verify");if(vb&&vb.disabled)return;var code=($("cl_code").value||"").replace(/\D/g,"");if(code.length<6){msg("Enter the 6 digit code from your email.",true);return}
   busy("cl_verify",true,"Signing in");msg("");
   try{var r=await sb.auth.verifyOtp({email:pendingEmail,token:code,type:"email"});if(r.error)throw r.error;/* onAuthStateChange takes it from here */}
   catch(err){msg(friendly(err),true);busy("cl_verify",false,"Sign in")}};
@@ -792,6 +796,20 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  };
  function wireBridge(){var pb=$("pickBtn");if(pb){var how=Contacts.available();pb.style.display=how==="file"?"none":"";pb.textContent="Add from contacts";pb.onclick=function(){Contacts.pick()}}}
 
+ /* ---------- links inside the app shell ---------- */
+ /* buy.aflac.com and the Unsubscribe confirmation open in the in app browser. Mail, messaging and
+    any other scheme are left alone so the phone hands them to the right app. */
+ function openInApp(url){var B=capPlugin("Browser");if(!B||!B.open)return false;
+  try{var p=B.open({url:url,presentationStyle:"popover"});if(p&&p.catch)p.catch(function(){});return true}catch(e){return false}}
+ function wireLinks(){
+  var ol=window.openL;
+  window.openL=function(u){if(/^https?:\/\//i.test(u||"")&&openInApp(u))return;if(ol)return ol(u);window.open(u,"_blank")};
+  document.addEventListener("click",function(e){
+   var t=e.target;var a=t&&t.closest?t.closest("a[href]"):null;if(!a)return;
+   var href=a.getAttribute("href")||"";
+   if(!/^https?:\/\//i.test(href))return;
+   if(openInApp(href)){e.preventDefault();e.stopPropagation()}},true)}
+
  /* ---------- account tab ---------- */
  var ra1=window.renderAccountTab;
  window.renderAccountTab=function(){ra1();var t=$("tabAccount");if(!t||!user)return;
@@ -805,7 +823,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  async function checkVersion(){try{var r=await sb.from("to_settings").select("value").eq("key","min_version").maybeSingle();var min=parseInt((r.data&&r.data.value)||"0",10);if(min>BUILD){var o=document.createElement("div");o.style.cssText="position:fixed;inset:0;background:rgba(28,36,48,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";o.innerHTML='<div style="background:#fff;border-radius:14px;padding:28px;max-width:420px;text-align:center"><h3 style="margin:0 0 8px;font-family:Sora,sans-serif">Update available</h3><p style="margin:0 0 16px">A newer version of the studio is ready. Reload to continue.</p><button class="btn" onclick="location.href=location.pathname+&#39;?v=&#39;+Date.now()">Reload</button></div>';document.body.appendChild(o)}}catch(e){}}
 
  /* ---------- boot ---------- */
- function boot(){buildLogin();wireBridge();
+ function boot(){buildLogin();wireBridge();wireLinks();
   lib(function(ok){if(!ok){msg("Could not load the sign in service. Check your connection and reload.",true);return}
    sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}});
    sb.auth.onAuthStateChange(function(ev,session){if(session&&session.user&&!user){if(location.hash&&/access_token|type=/.test(location.hash))history.replaceState(null,"",location.pathname+location.search);enter(session.user)}});

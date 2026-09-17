@@ -35,6 +35,7 @@ On Windows, `cap sync` finishes for both platforms. Xcode work happens on the Ma
 * `capacitor.config.ts`: `androidScheme` is `https` so localStorage and the Supabase session behave like the website. iOS stays on the default `capacitor` scheme because WKWebView does not let an app handle `https` itself.
 * iOS permission strings live in `ios/App/App/Info.plist`: `NSContactsUsageDescription`, `NSCameraUsageDescription`.
 * Android permissions live in `android/app/src/main/AndroidManifest.xml`: `READ_CONTACTS`, `CAMERA`, plus a `queries` block so the app can resolve the mail, messaging and browser apps the send buttons open.
+* `WRITE_CONTACTS` is declared only because the contacts plugin's permission alias covers read and write together. The app never writes a contact.
 * Icons come from `resources/icon-192.png` and `resources/icon-512.png`, built from the Aflac wordmark inside index.html. The native icon sets are already generated: `ios/App/App/Assets.xcassets/AppIcon.appiconset` and the Android mipmap folders.
 * iOS uses Swift Package Manager, not CocoaPods. Capacitor 8 generates `ios/App/CapApp-SPM/Package.swift` and no Podfile.
 
@@ -52,11 +53,22 @@ plugin three ways, in order: `Capacitor.Plugins.Contacts`, `Capacitor.registerPl
 `Capacitor.PluginHeaders` plus `Capacitor.nativePromise` pair that the native runtime injects on its
 own. The last one is what actually runs in this app.
 
-Android needs `WRITE_CONTACTS` declared next to `READ_CONTACTS`. The plugin puts both under one
-permission alias and reports access as denied without it. The app never writes a contact, and
-Android shows the one Contacts prompt for both.
-
 `npm test` runs the bridge against a fake native runtime in jsdom. No phone or emulator needed.
+
+## Links, camera and sign in
+
+* Web links, which in practice means the buy.aflac.com button and the Unsubscribe confirmation, open
+  in the in app browser through `@capacitor/browser`. Anything that is not http or https, so mailto,
+  sms and the Gmail and Outlook app schemes, is left alone and the phone opens the right app.
+* The QR scanner is the same `getUserMedia` code the website uses. On Android the WebView maps the
+  camera request to the `CAMERA` permission we declare, and `BarcodeDetector` is built in. On iOS
+  there is no `BarcodeDetector`, so it falls back to jsQR from the CDN. Nothing native was added.
+  If the scanner fails on a real device, add `@capacitor-mlkit/barcode-scanning` and use it when
+  native, keeping the web scanner as the fallback.
+* Sign in inside the app is the 6 digit code. The magic link in the same email is pointed at
+  https://outreach.benefitsotb.com so it opens the website in Safari rather than a dead app URL. The
+  code field asks for a numeric keyboard, is focused once the code is sent, and submits by itself at
+  six digits.
 
 ## Not in git
 

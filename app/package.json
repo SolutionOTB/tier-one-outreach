@@ -1,0 +1,21 @@
+{
+  "name": "tier-one-outreach-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Native shell for the Tier One Outreach web app",
+  "scripts": {
+    "build:www": "node build-www.js",
+    "sync": "node build-www.js && cap sync",
+    "sync:android": "node build-www.js && cap sync android",
+    "sync:ios": "node build-www.js && cap sync ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.2",
+    "@capacitor/core": "^8.5.2",
+    "@capacitor/ios": "^8.5.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.5.2",
+    "typescript": "^7.0.2"
+  }
+}

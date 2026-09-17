@@ -74,6 +74,27 @@ jsdom: 42 checks, no phone or emulator needed.
   code field asks for a numeric keyboard, is focused once the code is sent, and submits by itself at
   six digits.
 
+## Cloud builds
+
+`codemagic.yaml` at the repo root has two workflows, both started by hand from the Codemagic UI.
+Neither one runs on a push.
+
+* `android-debug` assembles a debug APK and leaves it in the artifacts. Free, no Apple account,
+  and the right way to prove a change before spending an iOS build on it.
+* `ios-testflight` builds, signs and uploads to TestFlight. Signing comes from an App Store Connect
+  integration named `Tier One Outreach ASC` that lives in the Codemagic UI. There are no secrets in
+  the repo and no environment variable groups to create.
+
+Both workflows run `npm ci`, `npm test` and `npm run build:www` before Capacitor copies the web
+assets into the platform project, so a failing test stops the build.
+
+The iOS build number comes from Codemagic's `BUILD_NUMBER`, applied with `agvtool`. That needs
+`VERSIONING_SYSTEM = "apple-generic"`, which is set on both build configurations in
+`ios/App/App.xcodeproj/project.pbxproj`. Capacitor does not set it.
+
+Click by click setup, from the Apple key to the public TestFlight link, is in the OneDrive project
+folder at `Brand Assets/agent/TESTFLIGHT-STEPS.md`.
+
 ## Not in git
 
 `node_modules`, `app/www`, the iOS and Android build folders. `app/www` is generated, so any build has to run `npm run build:www` first.

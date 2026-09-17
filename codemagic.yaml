@@ -1,0 +1,96 @@
+# Codemagic build config for Tier One Outreach.
+#
+# There are no keys, certificates or passwords in this file and none may be added.
+# iOS signing and the TestFlight upload run on the App Store Connect integration named
+# "Tier One Outreach ASC", which is created once in the Codemagic UI. See
+# Brand Assets/agent/TESTFLIGHT-STEPS.md in the OneDrive project folder.
+#
+# The web app is the index.html at the repo root, built by inject.py in OneDrive.
+# app/build-www.js copies it into app/www, then Capacitor copies app/www into each platform.
+# Neither workflow starts on a push. Both are started by hand from the Codemagic UI.
+
+definitions:
+  scripts:
+    - &build_www
+      name: Build the web assets
+      script: |
+        cd app
+        npm ci
+        npm test
+        npm run build:www
+
+workflows:
+  ios-testflight:
+    name: iOS TestFlight
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+    integrations:
+      app_store_connect: Tier One Outreach ASC
+    environment:
+      xcode: latest
+      node: 22
+      vars:
+        XCODE_PROJECT: "app/ios/App/App.xcodeproj"
+        XCODE_SCHEME: "App"
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.solutionotb.tieroneoutreach
+    scripts:
+      - *build_www
+      - name: Copy the web assets into the iOS project
+        script: |
+          cd app
+          npx cap sync ios
+      - name: Set up code signing
+        script: xcode-project use-profiles
+      - name: Set the build number
+        script: |
+          cd app/ios/App
+          agvtool new-version -all "$BUILD_NUMBER"
+      - name: Build the ipa
+        script: |
+          xcode-project build-ipa --project "$XCODE_PROJECT" --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
+      email:
+        recipients:
+          - chris@solutionotb.com
+        notify:
+          success: true
+          failure: true
+
+  android-debug:
+    name: Android debug APK
+    instance_type: linux_x2
+    max_build_duration: 30
+    environment:
+      node: 22
+      java: 21
+    scripts:
+      - *build_www
+      - name: Copy the web assets into the Android project
+        script: |
+          cd app
+          npx cap sync android
+      - name: Point Gradle at the Android SDK
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > app/android/local.properties
+      - name: Assemble the debug APK
+        script: |
+          cd app/android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+    artifacts:
+      - app/android/app/build/outputs/**/*.apk
+    publishing:
+      email:
+        recipients:
+          - chris@solutionotb.com
+        notify:
+          success: true
+          failure: true

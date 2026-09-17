@@ -66,7 +66,9 @@ workflows:
 
   android-debug:
     name: Android debug APK
-    instance_type: linux_x2
+    # macOS, not Linux: the free plan is 500 macOS minutes a month and Linux instances
+    # need a paid subscription. The Android SDK and Gradle are on the macOS image too.
+    instance_type: mac_mini_m2
     max_build_duration: 30
     environment:
       node: 22

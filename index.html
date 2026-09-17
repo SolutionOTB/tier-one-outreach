@@ -476,15 +476,27 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function linkBox(){var v=hasLink()?link():"";return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#fafcfe"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">YOUR UNIQUE LINK (from your Fast Track onboarding email)</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="kit_link" value="'+esc(v)+'" placeholder="Paste your unique link here" style="flex:1;min-width:220px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit"><button class="btn sm" style="height:36px" onclick="kitSetLink(document.getElementById(&#39;kit_link&#39;).value)">Save</button><button class="btn ghost sm" style="height:36px" onclick="kitScan()">Scan QR code</button></div><div class="help" style="margin-top:6px">'+(hasLink()?"Every email, text, post and QR code uses this link.":"On your phone, tap Scan QR code and point the camera at the QR code in your onboarding email. Until a link is saved, pieces use https://buy.aflac.com/.")+'</div></div>'}
  var scan={stream:null,timer:null};
  function scanMsg(t){var m=$("kitscanmsg");if(m)m.textContent=t}
- window.kitScanStop=function(){if(scan.timer){clearInterval(scan.timer);scan.timer=null}if(scan.stream){scan.stream.getTracks().forEach(function(t){t.stop()});scan.stream=null}var m=$("kitscan");if(m)m.style.display="none"};
+ function kitScanStop(){if(scan.timer){clearInterval(scan.timer);scan.timer=null}if(scan.stream){scan.stream.getTracks().forEach(function(t){t.stop()});scan.stream=null}var m=$("kitscan");if(m)m.style.display="none"}
+ window.kitScanStop=kitScanStop;
  function scanFound(raw){raw=(raw||"").trim();if(!/^https?:\/\//i.test(raw)){scanMsg("That QR code is not a web link. Try the one in your onboarding email.");return}kitScanStop();kitSetLink(raw)}
  function loadJsQR(cb){if(window.jsQR)return cb(true);var s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js";s.onload=function(){cb(!!window.jsQR)};s.onerror=function(){cb(false)};document.head.appendChild(s)}
+ function scanJsQR(v){loadJsQR(function(ok){
+  if(!scan.stream)return;
+  if(!ok){scanMsg("Scanning is not supported in this browser. Scan the QR code with your phone camera app and paste the link.");return}
+  var c=document.createElement("canvas"),ctx=c.getContext("2d");
+  if(scan.timer)clearInterval(scan.timer);
+  scan.timer=setInterval(function(){if(v.readyState<2)return;c.width=v.videoWidth;c.height=v.videoHeight;ctx.drawImage(v,0,0);
+   var d=ctx.getImageData(0,0,c.width,c.height);var r=window.jsQR(d.data,d.width,d.height,{inversionAttempts:"dontInvert"});
+   if(r&&r.data)scanFound(r.data)},350)})}
  window.kitScan=function(){var m=$("kitscan");if(!m){m=document.createElement("div");m.id="kitscan";m.style.cssText="position:fixed;inset:0;z-index:99999;background:rgba(11,18,32,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:16px;text-align:center";m.innerHTML='<div style="color:#fff;font-weight:700;margin-bottom:10px;max-width:420px">Point the camera at the QR code in your Fast Track onboarding email</div><video id="kitvid" autoplay playsinline muted style="width:min(92vw,420px);max-height:60vh;border-radius:14px;background:#000"></video><div id="kitscanmsg" style="color:#EAF7FC;margin-top:10px;font-size:14px;min-height:20px;max-width:420px"></div><button class="btn ghost sm" style="margin-top:12px;background:#fff" onclick="kitScanStop()">Cancel</button>';document.body.appendChild(m)}
   m.style.display="flex";scanMsg("Starting camera");
   if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){scanMsg("This browser cannot use the camera. Open the studio on your phone, or scan the QR code with your phone camera app and paste the link.");return}
   navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}},audio:false}).then(function(stream){scan.stream=stream;var v=$("kitvid");v.srcObject=stream;v.play().catch(function(){});scanMsg("Looking for a QR code");
-   if(window.BarcodeDetector){var det=new BarcodeDetector({formats:["qr_code"]});scan.timer=setInterval(function(){if(v.readyState<2)return;det.detect(v).then(function(codes){if(codes&&codes.length)scanFound(codes[0].rawValue)}).catch(function(){})},350);return}
-   loadJsQR(function(ok){if(!ok){scanMsg("Scanning is not supported in this browser. Scan the QR code with your phone camera app and paste the link.");return}var c=document.createElement("canvas"),ctx=c.getContext("2d");scan.timer=setInterval(function(){if(v.readyState<2)return;c.width=v.videoWidth;c.height=v.videoHeight;ctx.drawImage(v,0,0);var d=ctx.getImageData(0,0,c.width,c.height);var r=window.jsQR(d.data,d.width,d.height,{inversionAttempts:"dontInvert"});if(r&&r.data)scanFound(r.data)},350)})
+   var det=null;if(window.BarcodeDetector){try{det=new window.BarcodeDetector({formats:["qr_code"]})}catch(e){det=null}}
+   if(det){var gaveUp=false;scan.timer=setInterval(function(){if(v.readyState<2)return;
+    det.detect(v).then(function(codes){if(codes&&codes.length)scanFound(codes[0].rawValue)})
+    .catch(function(){if(gaveUp||!scan.stream)return;gaveUp=true;if(scan.timer){clearInterval(scan.timer);scan.timer=null}scanMsg("Looking for a QR code");scanJsQR(v)})},350);return}
+   scanJsQR(v)
   }).catch(function(){scanMsg("Camera permission was not granted. Allow the camera, or scan the QR code with your phone camera app and paste the link.")})};
  function addrBox(){var a=addr();return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#fafcfe"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">YOUR BUSINESS MAILING ADDRESS (required in the email footer)</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="kit_addr" value="'+esc(a)+'" placeholder="Street, City, ST ZIP" style="flex:1;min-width:220px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit"><button class="btn sm" style="height:36px" onclick="kitSetAddr(document.getElementById(&#39;kit_addr&#39;).value)">Save</button></div></div>'}
 
@@ -797,18 +809,19 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function wireBridge(){var pb=$("pickBtn");if(pb){var how=Contacts.available();pb.style.display=how==="file"?"none":"";pb.textContent="Add from contacts";pb.onclick=function(){Contacts.pick()}}}
 
  /* ---------- links inside the app shell ---------- */
- /* buy.aflac.com and the Unsubscribe confirmation open in the in app browser. Mail, messaging and
-    any other scheme are left alone so the phone hands them to the right app. */
- function openInApp(url){var B=capPlugin("Browser");if(!B||!B.open)return false;
+ /* Two hosts open in the in app browser: the buy.aflac.com link in every approved piece and the
+    Unsubscribe confirmation. Every other link, and every scheme that is not http or https, stays on
+    the old path so the phone hands mail, messaging and the browser to the right app. */
+ var INAPP_HOSTS={"buy.aflac.com":1,"pytbtuzeeguqgrhszmpr.functions.supabase.co":1};
+ function inAppHost(url){try{var h=new URL(url,window.location.href);return /^https?:$/i.test(h.protocol)&&!!INAPP_HOSTS[h.hostname.toLowerCase()]}catch(e){return false}}
+ function openInApp(url){if(!inAppHost(url))return false;var B=capPlugin("Browser");if(!B||!B.open)return false;
   try{var p=B.open({url:url,presentationStyle:"popover"});if(p&&p.catch)p.catch(function(){});return true}catch(e){return false}}
  function wireLinks(){
   var ol=window.openL;
-  window.openL=function(u){if(/^https?:\/\//i.test(u||"")&&openInApp(u))return;if(ol)return ol(u);window.open(u,"_blank")};
+  window.openL=function(u){if(openInApp(u))return;if(ol)return ol(u);window.open(u,"_blank")};
   document.addEventListener("click",function(e){
    var t=e.target;var a=t&&t.closest?t.closest("a[href]"):null;if(!a)return;
-   var href=a.getAttribute("href")||"";
-   if(!/^https?:\/\//i.test(href))return;
-   if(openInApp(href)){e.preventDefault();e.stopPropagation()}},true)}
+   if(openInApp(a.getAttribute("href")||"")){e.preventDefault();e.stopPropagation()}},true)}
 
  /* ---------- account tab ---------- */
  var ra1=window.renderAccountTab;

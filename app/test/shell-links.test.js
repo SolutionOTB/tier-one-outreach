@@ -23,6 +23,8 @@ function run(native) {
     '<!doctype html><html><head></head><body><input id="file"><button id="pickBtn"></button><div id="toast"></div>' +
     '<a id="cta" href="https://buy.aflac.com/xyz">Apply</a>' +
     '<a id="unsub" href="https://pytbtuzeeguqgrhszmpr.functions.supabase.co/unsub?t=abc">Unsubscribe</a>' +
+    '<a id="other" href="https://www.aflac.com/about">Aflac</a>' +
+    '<a id="gmailweb" href="https://mail.google.com/mail/?view=cm">Gmail web</a>' +
     '<a id="mail" href="mailto:someone@example.com?subject=hi">Email</a>' +
     '<a id="sms" href="sms:+15155550111?&body=hi">Text</a>' +
     '<a id="tel" href="tel:+15155550111">Call</a>' +
@@ -74,12 +76,16 @@ check('the Unsubscribe confirmation opens in the in app browser', click(r.win, '
 check('a mailto link is left to the phone', click(r.win, 'mail') === false && r.opened.length === 2);
 check('an sms link is left to the phone', click(r.win, 'sms') === false && r.opened.length === 2);
 check('a tel link is left to the phone', click(r.win, 'tel') === false && r.opened.length === 2);
+check('any other https link keeps the old path', click(r.win, 'other') === false && r.opened.length === 2);
+check('the Gmail web link keeps the old path', click(r.win, 'gmailweb') === false && r.opened.length === 2);
 r.api.openL('https://buy.aflac.com/from-openL');
-check('openL routes through the in app browser', r.opened.some(o => o.indexOf('from-openL') > 0) && r.windowOpened.length === 0);
+check('openL routes the allowed host through the in app browser', r.opened.some(o => o.indexOf('from-openL') > 0) && r.windowOpened.length === 0);
+r.api.openL('https://mail.google.com/mail/?view=cm');
+check('openL leaves any other host on the old path', r.windowOpened.length === 1, r.windowOpened.join(','));
 
 // plain web
 r = run(false);
-check('on the web a link is not intercepted', click(r.win, 'cta') === false && r.opened.length === 0);
+check('on the web the allowed host is not intercepted either', click(r.win, 'cta') === false && r.opened.length === 0);
 r.api.openL('https://buy.aflac.com/web');
 check('on the web openL still opens a tab', r.windowOpened.length === 1, r.windowOpened.join(','));
 

@@ -53,16 +53,20 @@ plugin three ways, in order: `Capacitor.Plugins.Contacts`, `Capacitor.registerPl
 `Capacitor.PluginHeaders` plus `Capacitor.nativePromise` pair that the native runtime injects on its
 own. The last one is what actually runs in this app.
 
-`npm test` runs the bridge against a fake native runtime in jsdom. No phone or emulator needed.
+`npm test` runs the bridge, the link rules and the QR fallback against a fake native runtime in
+jsdom: 42 checks, no phone or emulator needed.
 
 ## Links, camera and sign in
 
-* Web links, which in practice means the buy.aflac.com button and the Unsubscribe confirmation, open
-  in the in app browser through `@capacitor/browser`. Anything that is not http or https, so mailto,
-  sms and the Gmail and Outlook app schemes, is left alone and the phone opens the right app.
+* Two hosts open in the in app browser through `@capacitor/browser`: `buy.aflac.com` and the
+  Unsubscribe function host `pytbtuzeeguqgrhszmpr.functions.supabase.co`. The list is `INAPP_HOSTS`
+  in `kit/cloud.js`. Every other link stays on the path it always used, and anything that is not
+  http or https, so mailto, sms and the Gmail and Outlook app schemes, goes to the phone's own apps.
 * The QR scanner is the same `getUserMedia` code the website uses. On Android the WebView maps the
   camera request to the `CAMERA` permission we declare, and `BarcodeDetector` is built in. On iOS
-  there is no `BarcodeDetector`, so it falls back to jsQR from the CDN. Nothing native was added.
+  there is no `BarcodeDetector`, so it falls back to jsQR from the CDN. It also falls back to jsQR
+  when `BarcodeDetector` exists but its `detect` rejects, which it does on some Android builds.
+  Nothing native was added.
   If the scanner fails on a real device, add `@capacitor-mlkit/barcode-scanning` and use it when
   native, keeping the web scanner as the fallback.
 * Sign in inside the app is the 6 digit code. The magic link in the same email is pointed at

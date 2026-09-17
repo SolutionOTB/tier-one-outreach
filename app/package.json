@@ -7,15 +7,18 @@
     "build:www": "node build-www.js",
     "sync": "node build-www.js && cap sync",
     "sync:android": "node build-www.js && cap sync android",
-    "sync:ios": "node build-www.js && cap sync ios"
+    "sync:ios": "node build-www.js && cap sync ios",
+    "test": "node test/contacts-bridge.test.js"
   },
   "dependencies": {
+    "@capacitor-community/contacts": "^8.0.0",
     "@capacitor/android": "^8.5.2",
     "@capacitor/core": "^8.5.2",
     "@capacitor/ios": "^8.5.2"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
+    "jsdom": "^30.1.0",
     "typescript": "^7.0.2"
   }
 }

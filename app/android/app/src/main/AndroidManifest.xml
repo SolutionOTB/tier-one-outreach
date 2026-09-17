@@ -39,8 +39,12 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- Read the address book so the associate can pick contacts -->
+    <!-- Read the address book so the associate can pick contacts.
+         WRITE_CONTACTS is declared because the contacts plugin groups read and write under one
+         permission alias and will not report access as granted without it. The app never writes a
+         contact, and Android shows the single Contacts prompt for both. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
 
     <!-- Scan the Fast Track QR code -->
     <uses-permission android:name="android.permission.CAMERA" />

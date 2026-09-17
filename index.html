@@ -681,9 +681,114 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  window.saveMsg=function(btn,ch,i){btn.textContent="Logged";btn.classList.add("done");logSend(ch,"save",i);toast("Logged")};
 
  /* ---------- contacts bridge: one interface, three ways in ---------- */
+ /* Native plugin lookup that works on a page with no bundler. The native runtime injects
+    Capacitor.PluginHeaders and Capacitor.nativePromise, so the plugin can be called even when
+    @capacitor/core is not loaded. Capacitor.Plugins.Contacts and Capacitor.registerPlugin are
+    used first when they are there. */
+ function capPlugin(name){var C=window.Capacitor;if(!C)return null;if(!(C.isNativePlatform&&C.isNativePlatform()))return null;
+  if(C.Plugins&&C.Plugins[name])return C.Plugins[name];
+  var hdr=(C.PluginHeaders||[]).filter(function(h){return h&&h.name===name})[0];if(!hdr)return null;
+  if(typeof C.registerPlugin==="function"){try{var p=C.registerPlugin(name);if(p)return p}catch(e){}}
+  if(typeof C.nativePromise!=="function")return null;
+  var api={};(hdr.methods||[]).forEach(function(m){api[m.name]=function(opts){return C.nativePromise(name,m.name,opts||{})}});return api}
+ function nativeContacts(){return capPlugin("Contacts")}
+
+ var ctRows=[],ctSel={},ctQ="";
+ function digits(s){return String(s||"").replace(/\D/g,"")}
+ function bestPhone(list){list=list||[];var mob=list.filter(function(p){return /mobile|cell|iphone/i.test(p.type||p.label||"")})[0];
+  var pri=list.filter(function(p){return p.isPrimary})[0];var any=list.filter(function(p){return p.number})[0];
+  return ((mob&&mob.number)||(pri&&pri.number)||(any&&any.number)||"")}
+ function bestEmail(list){list=list||[];var pri=list.filter(function(e){return e.isPrimary})[0];
+  var home=list.filter(function(e){return /home|personal/i.test(e.type||e.label||"")})[0];var any=list.filter(function(e){return e.address})[0];
+  return ((pri&&pri.address)||(home&&home.address)||(any&&any.address)||"")}
+ function ctNorm(p){var n=p.name||{},first=(n.given||"").trim(),last=(n.family||"").trim(),disp=(n.display||"").trim();
+  if(!first&&!last&&disp){var q=disp.split(/\s+/);first=q[0]||"";last=q.slice(1).join(" ")}
+  var email=bestEmail(p.emails),phone=bestPhone(p.phones);
+  if(!first&&!last)first=email||phone;
+  return {id:p.contactId||(first+last+email+phone),first:first||"Contact",last:last||" ",email:email,phone:phone,
+   label:(disp||((first+" "+last).trim()))||email||phone}}
+ function ctHave(c){var d=digits(c.phone);return st.contacts.some(function(x){
+  return (c.email&&(x.email||"").toLowerCase()===c.email.toLowerCase())||(d&&digits(x.phone)===d)})}
+
+ function ctStyle(){if($("ct_css"))return;var s=document.createElement("style");s.id="ct_css";
+  s.textContent="#ct .dpan{left:0;right:0;margin:0 auto;width:min(560px,100%);background:#fff;display:flex;flex-direction:column}"
+  +"#ct .ctbody{flex:1;overflow-y:auto;padding:0 0 10px}"
+  +"#ct .ctfoot{position:sticky;bottom:0;background:#fff;border-top:1px solid var(--line);padding:14px 18px;display:flex;gap:10px;align-items:center}"
+  +"#ct .ctfoot .btn{flex:1;white-space:nowrap;padding:0 14px}"
+  +"#ct .ctfoot .btn.ghost{flex:0 0 auto}"
+  +"#ct .ctsearch{padding:14px 18px 10px;background:#fff;position:sticky;top:0;z-index:1;border-bottom:1px solid var(--line)}"
+  +"#ct .ctrow{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--line);cursor:pointer}"
+  +"#ct .ctrow:hover{background:#f7fafc}"
+  +"#ct .ctrow input{width:20px;height:20px;flex:0 0 auto;accent-color:#0070A9;margin:0}"
+  +"#ct .ctname{font-weight:600;font-size:15px}"
+  +"#ct .ctsub{display:block;font-size:12.5px;color:var(--muted);word-break:break-word}"
+  +"#ct .ctnote{padding:16px 18px;color:var(--muted);font-size:13.5px}";
+  document.head.appendChild(s)}
+ function ctSheet(){var d=$("ct");if(d)return d;ctStyle();
+  d=document.createElement("div");d.id="ct";d.className="drawer";
+  d.innerHTML='<div class="dpan"><div class="dhead"><div style="flex:1"><div style="font-family:Sora,sans-serif;font-weight:700;font-size:17px">Add from contacts</div>'
+   +'<div class="help" style="margin-top:2px">Pick the people you want to send approved outreach to. Nothing is sent yet.</div></div>'
+   +'<button class="btn ghost sm" onclick="ctClose()">Close</button></div>'
+   +'<div class="ctsearch"><input id="ct_q" type="search" placeholder="Search your contacts" autocomplete="off">'
+   +'<div class="help" id="ct_count" style="margin-top:8px"></div></div>'
+   +'<div class="ctbody" id="ct_list"></div>'
+   +'<div class="ctfoot"><button class="btn" id="ct_add" onclick="ctAdd()">Add selected</button>'
+   +'<button class="btn ghost" onclick="ctClose()">Cancel</button></div></div>';
+  document.body.appendChild(d);
+  d.addEventListener("click",function(e){if(e.target===d)ctClose()});
+  var q=$("ct_q");if(q)q.addEventListener("input",function(){ctQ=q.value||"";ctList()});
+  document.addEventListener("keydown",function(e){if(e.key==="Escape"&&d.classList.contains("on"))ctClose()});
+  return d}
+ function ctList(){var box=$("ct_list");if(!box)return;
+  var q=ctQ.trim().toLowerCase();
+  var rows=ctRows.filter(function(c){if(!q)return true;return (c.label+" "+c.email+" "+c.phone).toLowerCase().indexOf(q)>=0});
+  var cap=300,shown=rows.slice(0,cap),h="";
+  shown.forEach(function(c){var on=ctSel[c.id]?" checked":"";
+   h+='<label class="ctrow"><input type="checkbox" data-id="'+esc(c.id)+'"'+on+'>'
+    +'<span style="flex:1"><span class="ctname">'+esc(c.label)+'</span>'
+    +(c.email?'<span class="ctsub">'+esc(c.email)+'</span>':"")
+    +(c.phone?'<span class="ctsub">'+esc(c.phone)+'</span>':"")
+    +'</span></label>'});
+  if(!rows.length)h='<div class="ctnote">'+(ctRows.length?"No contact matches that search.":"No contact on this phone has an email address or a phone number.")+'</div>';
+  else if(rows.length>cap)h+='<div class="ctnote">Showing the first '+cap+" of "+rows.length+" contacts. Search to narrow the list.</div>";
+  box.innerHTML=h;
+  Array.prototype.forEach.call(box.querySelectorAll("input[type=checkbox]"),function(b){
+   b.addEventListener("change",function(){var id=b.getAttribute("data-id");if(b.checked)ctSel[id]=1;else delete ctSel[id];ctCount()})});
+  ctCount()}
+ function ctCount(){var n=Object.keys(ctSel).length,b=$("ct_add"),c=$("ct_count");
+  if(b){b.disabled=!n;b.textContent=n?"Add selected ("+n+")":"Add selected"}
+  if(c)c.textContent=ctRows.length?ctRows.length+" contacts on this phone have an email address or a phone number":""}
+ function ctClose(){var d=$("ct");if(d)d.classList.remove("on")}
+ function ctAdd(){var n=0,dup=0;
+  ctRows.forEach(function(c){if(!ctSel[c.id])return;if(!c.email&&!c.phone)return;
+   if(ctHave(c)){dup++;return}
+   st.contacts.push({first:c.first,last:c.last,email:c.email,phone:c.phone,rel:"",social:[],notes:"",source:"native"});n++});
+  ctSel={};ctClose();renderContacts();
+  toast(n+" contact"+(n===1?"":"s")+" added"+(dup?", "+dup+" already in your list":""))}
+ window.ctClose=ctClose;window.ctAdd=ctAdd;
+ function ctOpen(rows){ctRows=rows;ctSel={};ctQ="";var d=ctSheet();var q=$("ct_q");if(q)q.value="";ctList();d.classList.add("on");
+  if(q&&!/Android|iPhone|iPad/i.test(navigator.userAgent))q.focus()}
+
+ async function nativePick(){var P=nativeContacts();if(!P)return false;
+  try{var st1=await P.checkPermissions();
+   if(!st1||(st1.contacts!=="granted"&&st1.contacts!=="limited"))st1=await P.requestPermissions();
+   if(!st1||(st1.contacts!=="granted"&&st1.contacts!=="limited")){toast("Contacts access is off. Turn it on in Settings, then try again.");return true}
+   toast("Reading your contacts");
+   var r=await P.getContacts({projection:{name:true,emails:true,phones:true}});
+   var rows=((r&&r.contacts)||[]).map(ctNorm).filter(function(c){return c.email||c.phone});
+   rows.sort(function(a,b){return a.label.toLowerCase()<b.label.toLowerCase()?-1:1});
+   ctOpen(rows)}
+  catch(err){var m=(err&&err.message)||"";
+   if(/permission/i.test(m))toast("Contacts access is off. Turn it on in Settings, then try again.");
+   else toast("Could not read your contacts. Use Upload instead.")}
+  return true}
+
  window.Contacts={
-  available:function(){if(window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.Contacts)return "native";if(navigator.contacts&&navigator.contacts.select)return "web";return "file"},
-  pick:function(){var how=this.available();if(how==="native"){toast("Native contacts arrive with the app build.");return}if(how==="web"){pickContacts();return}var f=$("file");if(f)f.click()}
+  available:function(){if(nativeContacts())return "native";if(navigator.contacts&&navigator.contacts.select)return "web";return "file"},
+  pick:function(){var how=this.available();
+   if(how==="native"){nativePick();return}
+   if(how==="web"){pickContacts();return}
+   var f=$("file");if(f)f.click()}
  };
  function wireBridge(){var pb=$("pickBtn");if(pb){var how=Contacts.available();pb.style.display=how==="file"?"none":"";pb.textContent="Add from contacts";pb.onclick=function(){Contacts.pick()}}}
 

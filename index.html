@@ -501,7 +501,8 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function addrBox(){var a=addr();return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#fafcfe"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">YOUR BUSINESS MAILING ADDRESS (required in the email footer)</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="kit_addr" value="'+esc(a)+'" placeholder="Street, City, ST ZIP" style="flex:1;min-width:220px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit"><button class="btn sm" style="height:36px" onclick="kitSetAddr(document.getElementById(&#39;kit_addr&#39;).value)">Save</button></div></div>'}
 
  function renderKit(ch,c,sg){RENDERED[ch]=[];var out='<div class="designs">';
-  if(ch==="Email"){if(c&&c.unsubscribed_at){return out+'<div class="card2" style="padding:16px"><b>'+esc(c.first||"This contact")+' unsubscribed from email.</b> Text and social pieces are still available.</div></div>'}ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});out+=card(NAMES[k]+" ("+e.z+")",'<div style="background:#F5FAFD;padding:10px;overflow:auto">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
+  if(ch==="Email"){var SP=window.Suppression;if(c&&(c.unsubscribed_at||(SP&&SP.blocked(c)))){return out+'<div class="card2" style="padding:16px"><b>'+esc(c.first||"This contact")+' unsubscribed from email.</b> Text and social pieces are still available.</div></div>'}
+   if(c&&SP&&SP.pending(c)){SP.check([c]).then(function(){try{if(st.contacts[st.cur]===c)genForContact()}catch(e){}});return out+'<div class="card2" style="padding:16px">Checking this address</div></div>'}ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});out+=card(NAMES[k]+" ("+e.z+")",'<div style="background:#F5FAFD;padding:10px;overflow:auto">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
   else if(ch==="Text"){var list=ordered(sg.text).map(function(k){return{k:k,t:KIT.texts[k],lab:NAMES[k]}}).concat(["why_cancer","life_moment","nudge"].map(function(k){return{k:k,t:KIT.cancer_texts[k],lab:"Cancer kit: "+NAMES[k]}}));list.forEach(function(x,i){var body=smsText(x.t,c);RENDERED[ch].push({subject:x.lab,body:body,url:link(),tel:c.phone||""});out+=card(x.lab+" ("+x.t.z+")",'<div style="padding:6px 0">'+smsHTML(body,c)+'</div>',shareRow(ch,i),i===0)})}
   else{var caps=[["general","facebook","Facebook post"],["general","instagram","Instagram post"],["cancer","facebook","Cancer kit: Facebook post"],["cancer","instagram","Cancer kit: Instagram post"]];caps.forEach(function(x,i){var cp=KIT.captions[x[0]][x[1]],img=KIT.images[x[0]+"_"+x[1]],body=capText(cp);RENDERED[ch].push({subject:x[2],body:body,url:link(),img:img});out+=card(x[2]+(cp.z?" ("+cp.z+")":" (form number pending)"),'<div style="padding:12px 14px"><img src="'+img+'" alt="" style="width:100%;max-width:360px;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:10px" onerror="this.style.display=&#39;none&#39;"><pre style="white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.5;margin:0;color:#1D1D1F">'+esc(body)+'</pre></div>',shareRow(ch,i),false)})}
   return out+'</div>'}
@@ -661,6 +662,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   try{var r=await sb.from("to_contacts").select("*").eq("agent_id",user.id).order("created_at");if(r.error)throw r.error;rows=r.data||[];try{localStorage.setItem(cacheKey(),JSON.stringify(rows))}catch(e){}}
   catch(err){try{rows=JSON.parse(localStorage.getItem(cacheKey())||"null")}catch(e){rows=null}if(rows)toast("Offline. Showing your saved contacts.")}
   if(rows){st.contacts=rows.map(toLocal);rows.forEach(function(x){known[x.id]=1})}
+  suppLoadCache();suppCheck(st.contacts);
   login();
   try{rc0()}catch(e){}
   if(agent.link&&st.contacts.length){var t=$("tabnav");if(t)t.style.display="flex";showTab("outreach")}
@@ -688,6 +690,28 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   syncBusy=false;if(syncAgain){syncAgain=false;scheduleSync()}}
  var ls0=window.loadSample;
  window.loadSample=function(){var before=st.contacts.length;ls0();for(var i=before;i<st.contacts.length;i++)st.contacts[i].source="sample"};
+
+ /* ---------- generic unsubscribe list ---------- */
+ /* to_suppressed_emails holds every address that used the generic unsubscribe page. The app asks
+    about its own contacts through to_suppressed_among, which only answers for the caller's contacts,
+    and keeps the answer in memory plus a local cache so an offline session still honours it. */
+ var supp={},suppChecked={},SUPP_TTL=60000;
+ function suppKey(){return "cl_supp_"+(user?user.id:"")}
+ function normEmail(e){return String(e||"").trim().toLowerCase()}
+ function suppLoadCache(){try{JSON.parse(localStorage.getItem(suppKey())||"[]").forEach(function(e){supp[e]=1})}catch(e){}}
+ function suppSaveCache(){try{localStorage.setItem(suppKey(),JSON.stringify(Object.keys(supp)))}catch(e){}}
+ async function suppCheck(list){var emails=[];(list||[]).forEach(function(c){var e=normEmail(c&&c.email);if(e&&emails.indexOf(e)<0)emails.push(e)});
+  if(!emails.length)return;var now=Date.now();
+  if(!sb||!user){emails.forEach(function(e){suppChecked[e]=now});return}
+  try{var r=await sb.rpc("to_suppressed_among",{emails:emails});if(r.error)throw r.error;
+   var hit={};(r.data||[]).forEach(function(e){hit[normEmail(e)]=1});
+   emails.forEach(function(e){if(hit[e])supp[e]=1;else delete supp[e];suppChecked[e]=now});suppSaveCache()}
+  catch(err){emails.forEach(function(e){suppChecked[e]=now})}}
+ window.Suppression={
+  blocked:function(c){return !!supp[normEmail(c&&c.email)]},
+  pending:function(c){var e=normEmail(c&&c.email);if(!e||!user)return false;var t=suppChecked[e];return !t||Date.now()-t>SUPP_TTL},
+  check:suppCheck
+ };
 
  /* ---------- send log ---------- */
  function logSend(ch,act,i){if(!sb||!user)return;var d=(RENDERED[ch]||[])[i]||{};var c=st.cur!==null&&st.cur!==undefined?st.contacts[st.cur]:null;var z=((d.body||"").match(/Z26\d{5}[A-Z]?/)||[])[0]||"";

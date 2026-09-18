@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Unsubscribe</title>
+<!--
+  Generic unsubscribe page for Tier One Outreach, served by GitHub Pages at
+  https://outreach.benefitsotb.com/unsubscribe.html
+  Bulk emails carry this link because one email to many people cannot carry a per contact token.
+  The page takes an optional ?e= address to prefill, shows a one line confirm, and on confirm posts
+  the address to the unsub-email edge function, which adds it to to_suppressed_emails.
+  It is a static page because Supabase serves HTML from edge functions as plain text.
+-->
+<style>
+  :root{--blue:#0070A9;--ink:#1C2430;--muted:#5B6675;--line:#E1E8EF;--bg:#F5FAFD}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);font-family:Arial,Helvetica,sans-serif;color:var(--ink)}
+  .box{max-width:520px;margin:60px auto;background:#fff;border:1px solid var(--line);border-radius:14px;padding:36px 32px}
+  h1{font-size:22px;margin:0 0 12px;color:var(--blue)}
+  p{font-size:16px;line-height:1.5;margin:0 0 12px}
+  label{display:block;font-size:13px;font-weight:700;color:var(--muted);margin:16px 0 6px}
+  input{width:100%;font:inherit;font-size:16px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;color:var(--ink)}
+  input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(0,112,169,.15)}
+  button{margin-top:16px;width:100%;height:48px;border:0;border-radius:10px;background:var(--blue);color:#fff;font:inherit;font-size:16px;font-weight:700;cursor:pointer}
+  button:disabled{opacity:.6;cursor:default}
+  .msg{min-height:20px;font-size:14px;color:#B3261E;margin-top:12px}
+  .ft{font-size:12px;color:var(--muted);margin-top:24px}
+  @media (max-width:560px){.box{margin:16px;padding:28px 20px}}
+</style>
+</head>
+<body>
+<div class="box">
+  <div id="ask">
+    <h1>Unsubscribe</h1>
+    <p>Stop emails from Tier One Direct associates to this address.</p>
+    <form id="f" novalidate>
+      <label for="e">Email address</label>
+      <input id="e" type="email" autocomplete="email" inputmode="email" required>
+      <button id="b" type="submit">Unsubscribe</button>
+      <div class="msg" id="m" role="alert"></div>
+    </form>
+  </div>
+  <div id="done" hidden>
+    <h1>You are unsubscribed</h1>
+    <p>You will not receive further emails through this program at <b id="d"></b>.</p>
+    <p>If you change your mind, just let the associate who wrote to you know.</p>
+  </div>
+  <p class="ft">Tier One Direct, an Aflac company</p>
+</div>
+<script>
+(function(){
+  var FN = "https://pytbtuzeeguqgrhszmpr.functions.supabase.co/unsub-email";
+  var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
+  var e = document.getElementById("e"), b = document.getElementById("b"), m = document.getElementById("m");
+
+  // Prefill from ?e= when a link carries one, then take it out of the address bar.
+  try {
+    var q = new URLSearchParams(location.search).get("e");
+    if (q) { e.value = q.trim(); history.replaceState(null, "", location.pathname); }
+  } catch (x) {}
+
+  document.getElementById("f").addEventListener("submit", function(ev){
+    ev.preventDefault();
+    var v = (e.value || "").trim().toLowerCase();
+    if (!EMAIL.test(v)) { m.textContent = "Enter a valid email address."; e.focus(); return; }
+    m.textContent = ""; b.disabled = true; b.textContent = "Unsubscribing";
+    fetch(FN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: v }) })
+      .then(function(r){ return r.json().then(function(j){ return { ok: r.ok && j && j.ok, err: j && j.error }; }); })
+      .then(function(res){
+        if (res.ok) {
+          document.getElementById("d").textContent = v;
+          document.getElementById("ask").hidden = true;
+          document.getElementById("done").hidden = false;
+          return;
+        }
+        m.textContent = res.err === "invalid_email" ? "Enter a valid email address." :
+          "We could not process this request. Please reply to the email you received and ask to be removed.";
+        b.disabled = false; b.textContent = "Unsubscribe";
+      })
+      .catch(function(){
+        m.textContent = "No connection. Check your signal and try again.";
+        b.disabled = false; b.textContent = "Unsubscribe";
+      });
+  });
+})();
+</script>
+</body>
+</html>

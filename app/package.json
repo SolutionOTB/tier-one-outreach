@@ -8,7 +8,8 @@
     "sync": "node build-www.js && cap sync",
     "sync:android": "node build-www.js && cap sync android",
     "sync:ios": "node build-www.js && cap sync ios",
-    "test": "node test/contacts-bridge.test.js && node test/shell-links.test.js && node test/qr-fallback.test.js && node test/suppression.test.js && node test/coi-select.test.js"
+    "test": "node test/contacts-bridge.test.js && node test/shell-links.test.js && node test/qr-fallback.test.js && node test/suppression.test.js && node test/coi-select.test.js",
+    "icons": "capacitor-assets generate --ios --android"
   },
   "dependencies": {
     "@capacitor-community/contacts": "8.0.0",
@@ -18,8 +19,14 @@
     "@capacitor/ios": "8.5.2"
   },
   "devDependencies": {
+    "@capacitor/assets": "3.0.5",
     "@capacitor/cli": "8.5.2",
     "jsdom": "^30.1.0",
     "typescript": "^7.0.2"
+  },
+  "overrides": {
+    "@capacitor/assets": {
+      "sharp": "0.34.5"
+    }
   }
 }

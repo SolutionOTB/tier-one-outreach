@@ -464,7 +464,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  var NAMES={intro:"I joined Aflac",life_moment:"Thought of you",nudge:"Here is my link",why_cancer:"Why cancer coverage"};
  function ordered(sg){return [sg].concat(ORDER.filter(function(k){return k!==sg}))}
 
- function unsubUrl(c){return (c&&c.unsub_token)?"https://pytbtuzeeguqgrhszmpr.functions.supabase.co/unsub?t="+c.unsub_token:""}
+ function unsubUrl(c){if(c&&c.bulk)return "https://outreach.benefitsotb.com/unsubscribe.html";return (c&&c.unsub_token)?"https://outreach.benefitsotb.com/unsubscribe.html?t="+c.unsub_token:""}
  function emailText(e,c){var L=[fill("Hi [First name],",c),"",fill(e.body,c),"",KIT.list_label];KIT.products.forEach(function(p){L.push(p.label+" "+p.text)});L.push("",e.cta+": "+link(),"",fill(e.closing,c),"",e.signoff,AGENT(),"");KIT.email_disclosure.forEach(function(d){L.push(d)});L.push("",e.z+"   "+e.exp,fill(KIT.email_footer_tail,c),unsubUrl(c)?"Unsubscribe: "+unsubUrl(c):"Unsubscribe");return L.join("\n")}
  function emailHTMLKit(e,c){var h=KIT_TPL.split("{{EYEBROW}}").join(esc(e.eyebrow)).split("{{HEADLINE}}").join(esc(e.headline)).split("{{BODY}}").join(esc(e.body)).split("{{CTA}}").join(esc(e.cta)).split("{{CLOSING}}").join(esc(e.closing)).split("{{SIGNOFF}}").join(esc(e.signoff)).split("{{Z}}").join(e.z).split("{{EXP}}").join(e.exp);h=fillH(h,c);var u=unsubUrl(c);if(u)h=h.split('href="#" style="color:#0070A9;">Unsubscribe').join('href="'+esc(u)+'" style="color:#0070A9;">Unsubscribe');return h}
  function emailDoc(e,c){return '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>'+esc(e.subject)+'</title></head><body style="margin:0;padding:0;background:#F5FAFD;">'+emailHTMLKit(e,c)+'</body></html>'}
@@ -663,6 +663,89 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  window.BulkSel={cap:SEL_CAP,
   contacts:function(){return st.contacts.filter(function(c){return sel[ckey(c)]&&!selBlocked(c)})},
   clear:clearSel};
+
+ /* ---------- group email bar ---------- */
+ /* Shows while at least one contact is checked on the Center of influence screen. The piece is the
+    approved email rendered through the same emailDoc and emailText path as a single send. Two things
+    differ, both through the contact the piece is rendered for: with more than one person the first
+    name token reads "there", and the Unsubscribe link is the generic page, because one email to many
+    people cannot carry a per contact token. */
+ var BULK_UNSUB="https://outreach.benefitsotb.com/unsubscribe.html";
+ var bulkKey=null,bulkMode="bcc";
+ function bulkPieces(){return ORDER.filter(function(k){return KIT.emails[k]})}
+ function bulkRecipient(list){return {first:list.length===1?(list[0].first||"there"):"there",bulk:true}}
+ function bulkStyle(){if($("bulk_css"))return;var s=document.createElement("style");s.id="bulk_css";
+  s.textContent="#bulkbar{position:fixed;left:0;right:0;bottom:0;z-index:50;background:#fff;border-top:1px solid var(--line);box-shadow:0 -10px 30px rgba(11,18,32,.12);padding:10px 14px calc(10px + env(safe-area-inset-bottom))}"
+  +"#bulkbar[hidden]{display:none}"
+  +"#bulkbar .bbin{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:8px}"
+  +"#bulkbar .bbrow{display:flex;flex-wrap:wrap;align-items:center;gap:8px}"
+  +"#bulkbar .bbn{font-weight:700;font-size:15px;margin-right:auto}"
+  +"#bulkbar .bbclear{background:none;border:0;padding:0 4px;height:34px;color:#0070A9;font-weight:600;font-size:14px;cursor:pointer}"
+  +"#bulkbar select{width:100%;height:38px;padding:0 10px;font-size:14px}"
+  +"#bulkbar .bbmode{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}"
+  +"#bulkbar .bbmode label{display:flex;align-items:center;gap:6px;padding:0 10px;height:34px;font-size:14px;font-weight:600;cursor:pointer;margin:0}"
+  +"#bulkbar .bbmode input{width:16px;height:16px;padding:0;margin:0;accent-color:#0070A9}"
+  +"#bulkbar .bbmode label+label{border-left:1px solid var(--line)}"
+  +"#bulkbar .bbbtns .btn{flex:1 1 100px;height:40px;padding:0 6px;font-size:13px;justify-content:center;white-space:nowrap}"
+  +"body.bulkon #toast{bottom:calc(var(--bulkh,210px) + 12px)}"
+  +"#bulkbar .bbnote{font-size:12px;line-height:1.4;color:var(--muted)}#bulkbar .bbnote[hidden]{display:none}"
+  +"#bulkbar .bbmsg{font-size:13px;color:#B3261E}#bulkbar .bbmsg:empty{display:none}"
+  +"#st4.bulkpad{padding-bottom:calc(var(--bulkh,230px) + 20px)}";
+  document.head.appendChild(s)}
+ function bulkBar(){var b=$("bulkbar");if(b)return b;bulkStyle();
+  var keys=bulkPieces();if(!bulkKey)bulkKey=keys[0];
+  b=document.createElement("div");b.id="bulkbar";b.hidden=true;b.setAttribute("role","region");b.setAttribute("aria-label","Group email");
+  b.innerHTML='<div class="bbin">'
+   +'<div class="bbrow"><span class="bbn" id="bb_n"></span>'
+   +'<div class="bbmode" role="radiogroup" aria-label="Add the contacts as"><label><input type="radio" name="bb_mode" value="bcc" checked>Bcc</label><label><input type="radio" name="bb_mode" value="cc">Cc</label></div>'
+   +'<button class="bbclear" type="button" id="bb_clear" aria-label="Clear selection">Clear</button></div>'
+   +'<div class="bbnote" id="bb_ccnote" hidden>With Cc, everyone sees who else got the email.</div>'
+   +'<select id="bb_piece" aria-label="Approved email">'+keys.map(function(k){var e=KIT.emails[k];return '<option value="'+k+'">'+esc(NAMES[k]||k)+' ('+esc(e.z)+')</option>'}).join("")+'</select>'
+   +'<div class="bbrow bbbtns"><button class="btn sm" type="button" id="bb_copy">Copy Formatted</button><button class="btn sm" type="button" id="bb_gmail">Open in Gmail</button><button class="btn sm" type="button" id="bb_outlook">Open in Outlook</button></div>'
+   +'<div class="bbnote">Outlook fills in the addresses only for an Outlook or Microsoft 365 mailbox.</div>'
+   +'<div class="bbmsg" id="bb_msg" role="status" aria-live="polite"></div>'
+   +'</div>';
+  var host=$("st4")||document.body;host.appendChild(b);
+  $("bb_clear").addEventListener("click",function(){window.BulkSel.clear()});
+  $("bb_piece").addEventListener("change",function(){bulkKey=this.value});
+  Array.prototype.forEach.call(b.querySelectorAll("input[name=bb_mode]"),function(r){r.addEventListener("change",function(){if(r.checked){bulkMode=r.value;$("bb_ccnote").hidden=bulkMode!=="cc";bulkMeasure()}})});
+  $("bb_copy").addEventListener("click",function(){bulkSend("html")});
+  $("bb_gmail").addEventListener("click",function(){bulkSend("gmail")});
+  $("bb_outlook").addEventListener("click",function(){bulkSend("outlook")});
+  return b}
+ function bulkMeasure(){var b=$("bulkbar");if(b&&!b.hidden)document.body.style.setProperty("--bulkh",b.offsetHeight+"px")}
+ window.addEventListener("resize",bulkMeasure);
+ function bulkMsg(t){var m=$("bb_msg");if(m)m.textContent=t||"";bulkMeasure()}
+ function bulkBusy(on){["bb_copy","bb_gmail","bb_outlook"].forEach(function(id){var x=$(id);if(x)x.disabled=!!on})}
+ /* Checks the picked addresses against the unsubscribe lists before anything can be sent. The
+    answer is kept for a minute, so the send buttons themselves never wait on the network, which
+    keeps the clipboard write and the new tab inside the tap that started them. */
+ function bulkCheck(){var SP=window.Suppression,list=window.BulkSel.contacts();
+  if(!SP){bulkBusy(false);return}
+  var pend=list.filter(function(c){return SP.pending(c)});
+  if(!pend.length){bulkBusy(false);return}
+  bulkBusy(true);bulkMsg("Checking addresses");
+  SP.check(pend).then(function(){var before=list.length;window.renderCOI();var after=window.BulkSel.contacts().length;
+   bulkBusy(false);bulkMsg(before>after?(before-after)+" of the people you picked unsubscribed from email and "+(before-after===1?"was":"were")+" taken out.":"");bulkSync()})}
+ function bulkSync(){var b=bulkBar(),list=window.BulkSel.contacts(),n=list.length;
+  b.hidden=!n;var st4=$("st4");if(st4)st4.classList.toggle("bulkpad",!!n);document.body.classList.toggle("bulkon",!!n&&!!(st4&&st4.classList.contains("on")));bulkMeasure();
+  if(!n){bulkMsg("");return}
+  $("bb_n").textContent=n===1?"1 person selected":n+" people selected";
+  bulkCheck()}
+ function bulkBuild(){var list=window.BulkSel.contacts(),e=KIT.emails[bulkKey],pc=bulkRecipient(list);
+  return {list:list,e:e,subject:e.subject,html:emailDoc(e,pc),text:emailText(e,pc)}}
+ function bulkCopy(d){try{navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([d.html],{type:"text/html"}),"text/plain":new Blob([d.text],{type:"text/plain"})})]).then(function(){toast("Formatted email copied. Paste it into the message body.")},function(){window.__copy(d.text)})}catch(x){window.__copy(d.text)}}
+ function bulkSend(act){var SP=window.Suppression,list=window.BulkSel.contacts();
+  if(!list.length)return;
+  if(SP&&list.some(function(c){return SP.pending(c)})){bulkCheck();return}
+  var d=bulkBuild(),own=(window.cloudAgentEmail&&window.cloudAgentEmail())||"";
+  var to=d.list.map(function(c){return String(c.email||"").trim()}).filter(Boolean).join(",");
+  bulkCopy(d);
+  if(act==="gmail")openL("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(own)+"&"+bulkMode+"="+encodeURIComponent(to)+"&su="+encodeURIComponent(d.subject||""));
+  else if(act==="outlook")openL("https://outlook.office.com/mail/deeplink/compose?to="+encodeURIComponent(own)+"&"+bulkMode+"="+encodeURIComponent(to)+"&subject="+encodeURIComponent(d.subject||""));
+  if(window.logBulkSend)window.logBulkSend(d.list,act,d.subject,d.e.z);
+  bulkMsg("")}
+ window.addEventListener("coiselection",function(){bulkSync()});
  function boot(){trimSteps();wireImport();var tu=$("topurl");if(tu)tu.textContent=linkLabel();var coiLead=document.querySelector("#st4 .lead");if(coiLead&&/generate/i.test(coiLead.textContent))coiLead.textContent="Double click anyone to send them approved outreach by email, text or post.";var b=$("d_gen");if(b)b.textContent="Refresh";var g=b&&b.closest(".actions")&&b.closest(".actions").previousElementSibling;if(g&&/medical claims/.test(g.textContent))g.innerHTML="Every piece below is <b>Compliance approved</b> and used as written. Emails carry the full disclosure block and form number. Texts carry the opt out line where Compliance placed it. Only your link, the first name, your name and your mailing address are filled in.";}
  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
 })();
@@ -800,6 +883,11 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   try{sb.from("to_sends").insert({agent_id:user.id,contact_id:c&&c.id?c.id:null,channel:ch,action:act,piece:(d.subject||"").slice(0,120),z_number:z}).then(function(){})}catch(e){}}
  var sh1=window.sh;
  window.sh=function(ch,act,i){if(/^(gmail|outlook|sms|html|copy|ig|fb|img)$/.test(act))logSend(ch,act,i);return sh1(ch,act,i)};
+ /* Group email: one row per contact, channel "Email bulk" so weekly reporting can count it on its own. */
+ window.logBulkSend=function(list,act,piece,z){if(!sb||!user||!list||!list.length)return;
+  var rows=list.map(function(c){return {agent_id:user.id,contact_id:c.id||null,channel:"Email bulk",action:act,piece:String(piece||"").slice(0,120),z_number:z||""}});
+  try{sb.from("to_sends").insert(rows).then(function(){})}catch(e){}};
+ window.cloudAgentEmail=function(){return (user&&user.email)||""};
  window.saveMsg=function(btn,ch,i){btn.textContent="Logged";btn.classList.add("done");logSend(ch,"save",i);toast("Logged")};
 
  /* ---------- contacts bridge: one interface, three ways in ---------- */

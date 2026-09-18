@@ -8,7 +8,7 @@
     "sync": "node build-www.js && cap sync",
     "sync:android": "node build-www.js && cap sync android",
     "sync:ios": "node build-www.js && cap sync ios",
-    "test": "node test/contacts-bridge.test.js && node test/shell-links.test.js && node test/qr-fallback.test.js && node test/suppression.test.js"
+    "test": "node test/contacts-bridge.test.js && node test/shell-links.test.js && node test/qr-fallback.test.js && node test/suppression.test.js && node test/coi-select.test.js"
   },
   "dependencies": {
     "@capacitor-community/contacts": "8.0.0",

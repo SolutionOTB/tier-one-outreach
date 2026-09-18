@@ -581,6 +581,88 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
 
  var od0=openDrawer;
  window.openDrawer=function(i){od0(i);var ta=$("d_notes");if(ta){ta.style.display="none";var lab=ta.previousElementSibling;if(lab&&lab.tagName==="LABEL")lab.style.display="none"}var g=document.querySelector("#drawer .guard");if(g)g.style.display="none";try{genForContact()}catch(e){}};
+
+ /* ---------- center of influence: one click opens a contact, checkboxes pick a group ---------- */
+ /* Wraps the studio's renderCOI. The cards are drawn exactly as before; this swaps the double click
+    for a single click, adds a checkbox to each card, and adds search plus Select all above the list.
+    Contacts with no email, a per contact unsubscribe or a generic unsubscribe cannot be checked. */
+ var SEL_CAP=20,sel={},coiQ="";
+ function ckey(c){return c.id?"i:"+c.id:(c.email?"e:"+String(c.email).trim().toLowerCase():(c.phone?"p:"+String(c.phone).replace(/\D/g,""):"n:"+(c.first||"")+" "+(c.last||"")))}
+ function selBlocked(c){if(!c||!String(c.email||"").trim())return "No email address";if(c.unsubscribed_at)return "Unsubscribed from email";var SP=window.Suppression;if(SP&&SP.blocked(c))return "Unsubscribed from email";return ""}
+ function selCount(){return Object.keys(sel).length}
+ function coiMatch(c){var q=coiQ.trim().toLowerCase();if(!q)return true;return ((c.first||"")+" "+(c.last||"")+" "+(c.email||"")+" "+(c.phone||"")+" "+(c.rel||"")).toLowerCase().indexOf(q)>=0}
+ function coiMsg(t){var m=$("coimsg");if(m)m.textContent=t||""}
+ function coiCards(){var el=$("coi");return el?Array.prototype.slice.call(el.querySelectorAll(".pcard")):[]}
+ function coiContact(d){return st.contacts[+d.getAttribute("data-i")]}
+ function visibleEligible(){var out=[];coiCards().forEach(function(d){if(d.style.display==="none")return;var c=coiContact(d);if(c&&!selBlocked(c))out.push(c)});return out}
+ function coiStyle(){if($("coi_css"))return;var s=document.createElement("style");s.id="coi_css";
+  s.textContent="#coisel{display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;margin:0 0 14px}"
+  +"#coisel #coiq{flex:1 1 240px;min-width:0;width:auto;height:42px;padding:0 14px}"
+  +"#coisel .coiall{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;cursor:pointer;min-height:42px;margin:0}"
+  +"#coisel .coicount{font-size:13px;color:var(--muted)}"
+  +"#coisel .coimsg{flex-basis:100%;font-size:13px;color:#B3261E}"
+  +"#coisel .coimsg:empty{display:none}"
+  +"#coisel input[type=checkbox],.pcard .coick input{width:20px;height:20px;padding:0;margin:0;accent-color:#0070A9;flex:0 0 auto;cursor:pointer}"
+  +".pcard .coick{display:flex;align-items:center;justify-content:center;width:44px;height:44px;margin:-6px -4px -6px -10px;flex:0 0 auto;cursor:pointer}"
+  +".pcard .coick.off{opacity:.35;cursor:not-allowed}.pcard .coick.off input{cursor:not-allowed}"
+  +".pcard.picked{border-color:#0070A9;box-shadow:0 0 0 2px rgba(0,112,169,.2)}"
+  +".pcard .coiwhy{font-size:12px;color:var(--muted);margin-top:2px}"
+  +".pcard:focus-visible{outline:3px solid rgba(0,112,169,.35);outline-offset:2px}"
+  +"#coinone{padding:14px 2px;color:var(--muted);font-size:14px}#coinone:empty{display:none}";
+  document.head.appendChild(s)}
+ function coiBar(){var el=$("coi");if(!el||$("coisel"))return;
+  var bar=document.createElement("div");bar.id="coisel";
+  bar.innerHTML='<input id="coiq" type="search" placeholder="Search your contacts" autocomplete="off" aria-label="Search your contacts">'
+   +'<label class="coiall"><input type="checkbox" id="coiall"><span>Select all</span></label>'
+   +'<span class="coicount" id="coicount"></span>'
+   +'<button class="btn ghost sm" id="coiclear" type="button" style="display:none">Clear</button>'
+   +'<div class="coimsg" id="coimsg" role="status" aria-live="polite"></div>';
+  el.parentNode.insertBefore(bar,el);
+  var none=document.createElement("div");none.id="coinone";el.parentNode.insertBefore(none,el.nextSibling);
+  $("coiq").addEventListener("input",function(){coiQ=this.value||"";coiFilter()});
+  $("coiall").addEventListener("change",function(){selectAll(this.checked)});
+  $("coiclear").addEventListener("click",function(){clearSel()})}
+ function toggleSel(c,box){var k=ckey(c);
+  if(box.checked){if(selBlocked(c)){box.checked=false;return}
+   if(!sel[k]&&selCount()>=SEL_CAP){box.checked=false;coiMsg("You can select up to "+SEL_CAP+" contacts at a time. Uncheck one to add another.");return}
+   sel[k]=1}
+  else delete sel[k];
+  if(selCount()<SEL_CAP)coiMsg("");coiSync()}
+ function selectAll(on){var list=visibleEligible();
+  if(!on){list.forEach(function(c){delete sel[ckey(c)]});coiMsg("");coiSync();return}
+  var skipped=0;list.forEach(function(c){var k=ckey(c);if(sel[k])return;if(selCount()>=SEL_CAP){skipped++;return}sel[k]=1});
+  coiMsg(skipped?"You can select up to "+SEL_CAP+" contacts at a time. "+skipped+" more "+(skipped===1?"was":"were")+" not selected.":"");coiSync()}
+ function clearSel(){sel={};coiMsg("");coiSync()}
+ function coiSync(){var n=selCount();
+  coiCards().forEach(function(d){var c=coiContact(d),b=d.querySelector(".coick input");var on=!!(c&&sel[ckey(c)]);if(b)b.checked=on;d.classList.toggle("picked",on)});
+  var cnt=$("coicount");if(cnt)cnt.textContent=n?n+" selected":"";
+  var clr=$("coiclear");if(clr)clr.style.display=n?"":"none";
+  var all=$("coiall");if(all){var vis=visibleEligible(),picked=vis.filter(function(c){return sel[ckey(c)]}).length;
+   all.checked=vis.length>0&&picked===vis.length;all.indeterminate=picked>0&&picked<vis.length;all.disabled=!vis.length}
+  try{window.dispatchEvent(new CustomEvent("coiselection",{detail:{count:n}}))}catch(e){}}
+ function coiFilter(){var shown=0;coiCards().forEach(function(d){var c=coiContact(d);var ok=!c||coiMatch(c);d.style.display=ok?"":"none";if(ok)shown++});
+  var none=$("coinone");if(none)none.textContent=(shown||!st.contacts.length)?"":"No contact matches that search.";coiSync()}
+ var rcoi0=window.renderCOI;
+ window.renderCOI=function(){rcoi0();coiStyle();coiBar();
+  var lead=document.querySelector("#st4 .lead");if(lead)lead.textContent="Click or tap anyone to send them approved outreach by email, text or post. Check the box next to a name to pick people for a group email.";
+  var live={};st.contacts.forEach(function(c){if(!selBlocked(c))live[ckey(c)]=1});Object.keys(sel).forEach(function(k){if(!live[k])delete sel[k]});
+  coiCards().forEach(function(d,i){var c=st.contacts[i];if(!c)return;
+   d.setAttribute("data-i",i);d.ondblclick=null;d.onclick=function(){openDrawer(i)};
+   d.setAttribute("tabindex","0");d.setAttribute("role","button");
+   d.onkeydown=function(e){if(e.target!==d)return;if(e.key==="Enter"||e.key===" "){e.preventDefault();openDrawer(i)}};
+   var why=selBlocked(c),h=d.querySelector(".h");
+   var lab=document.createElement("label");lab.className="coick"+(why?" off":"");
+   lab.innerHTML='<input type="checkbox"'+(why?" disabled":"")+' aria-label="'+esc(why?(c.first||"Contact")+", "+why.toLowerCase()+", cannot be selected":"Select "+(c.first||"this contact")+" for a group email")+'">';
+   lab.addEventListener("click",function(e){e.stopPropagation()});
+   var box=lab.querySelector("input");box.addEventListener("change",function(e){e.stopPropagation();toggleSel(c,box)});
+   if(h)h.insertBefore(lab,h.firstChild);
+   if(why){var w=document.createElement("div");w.className="coiwhy";w.textContent=why;var r=d.querySelector(".rel");if(r&&r.parentNode)r.parentNode.appendChild(w)}
+   var help=d.querySelector(".help");if(help&&/double click/i.test(help.textContent))help.textContent="Click or tap to send"});
+  coiFilter();
+  var SP=window.Suppression;if(SP){var pend=st.contacts.filter(function(c){return SP.pending(c)});if(pend.length)SP.check(pend).then(function(){window.renderCOI()})}};
+ window.BulkSel={cap:SEL_CAP,
+  contacts:function(){return st.contacts.filter(function(c){return sel[ckey(c)]&&!selBlocked(c)})},
+  clear:clearSel};
  function boot(){trimSteps();wireImport();var tu=$("topurl");if(tu)tu.textContent=linkLabel();var coiLead=document.querySelector("#st4 .lead");if(coiLead&&/generate/i.test(coiLead.textContent))coiLead.textContent="Double click anyone to send them approved outreach by email, text or post.";var b=$("d_gen");if(b)b.textContent="Refresh";var g=b&&b.closest(".actions")&&b.closest(".actions").previousElementSibling;if(g&&/medical claims/.test(g.textContent))g.innerHTML="Every piece below is <b>Compliance approved</b> and used as written. Emails carry the full disclosure block and form number. Texts carry the opt out line where Compliance placed it. Only your link, the first name, your name and your mailing address are filled in.";}
  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
 })();

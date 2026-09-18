@@ -8,9 +8,12 @@
 <!--
   Generic unsubscribe page for Tier One Outreach, served by GitHub Pages at
   https://outreach.benefitsotb.com/unsubscribe.html
-  Bulk emails carry this link because one email to many people cannot carry a per contact token.
-  The page takes an optional ?e= address to prefill, shows a one line confirm, and on confirm posts
-  the address to the unsub-email edge function, which adds it to to_suppressed_emails.
+  Two modes, both posting to the unsub-email edge function:
+    ?t=<token>  per contact: every single contact email links here with that contact's token. One line
+                confirm, then the contact is marked unsubscribed for that associate.
+    no ?t=      generic: bulk emails link here because one email to many people cannot carry a per
+                contact token. Takes an optional ?e= to prefill; the address goes to to_suppressed_emails.
+  A malformed token falls back to the generic form.
   It is a static page because Supabase serves HTML from edge functions as plain text.
 -->
 <style>
@@ -34,17 +37,19 @@
 <div class="box">
   <div id="ask">
     <h1>Unsubscribe</h1>
-    <p>Stop emails from Tier One Direct associates to this address.</p>
+    <p id="lead">Stop emails from Tier One Direct associates to this address.</p>
     <form id="f" novalidate>
+      <div id="ef">
       <label for="e">Email address</label>
       <input id="e" type="email" autocomplete="email" inputmode="email" required>
+      </div>
       <button id="b" type="submit">Unsubscribe</button>
       <div class="msg" id="m" role="alert"></div>
     </form>
   </div>
   <div id="done" hidden>
     <h1>You are unsubscribed</h1>
-    <p>You will not receive further emails through this program at <b id="d"></b>.</p>
+    <p id="dline">You will not receive further emails through this program at <b id="d"></b>.</p>
     <p>If you change your mind, just let the associate who wrote to you know.</p>
   </div>
   <p class="ft">Tier One Direct, an Aflac company</p>
@@ -53,24 +58,35 @@
 (function(){
   var FN = "https://pytbtuzeeguqgrhszmpr.functions.supabase.co/unsub-email";
   var EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
+  var TOKEN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   var e = document.getElementById("e"), b = document.getElementById("b"), m = document.getElementById("m");
+  var token = "";
 
-  // Prefill from ?e= when a link carries one, then take it out of the address bar.
+  // Read ?t= or ?e= once, then take them out of the address bar.
   try {
-    var q = new URLSearchParams(location.search).get("e");
-    if (q) { e.value = q.trim(); history.replaceState(null, "", location.pathname); }
+    var params = new URLSearchParams(location.search);
+    var t = (params.get("t") || "").trim(), q = (params.get("e") || "").trim();
+    if (TOKEN.test(t)) token = t;
+    if (q) e.value = q;
+    if (t || q) history.replaceState(null, "", location.pathname);
   } catch (x) {}
+
+  if (token) {
+    document.getElementById("lead").textContent = "Stop emails from this Aflac associate.";
+    document.getElementById("ef").hidden = true;
+  }
 
   document.getElementById("f").addEventListener("submit", function(ev){
     ev.preventDefault();
     var v = (e.value || "").trim().toLowerCase();
-    if (!EMAIL.test(v)) { m.textContent = "Enter a valid email address."; e.focus(); return; }
+    if (!token && !EMAIL.test(v)) { m.textContent = "Enter a valid email address."; e.focus(); return; }
     m.textContent = ""; b.disabled = true; b.textContent = "Unsubscribing";
-    fetch(FN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: v }) })
+    fetch(FN, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(token ? { t: token } : { email: v }) })
       .then(function(r){ return r.json().then(function(j){ return { ok: r.ok && j && j.ok, err: j && j.error }; }); })
       .then(function(res){
         if (res.ok) {
-          document.getElementById("d").textContent = v;
+          if (token) document.getElementById("dline").textContent = "You will not receive further emails from this Aflac associate through this program.";
+          else document.getElementById("d").textContent = v;
           document.getElementById("ask").hidden = true;
           document.getElementById("done").hidden = false;
           return;

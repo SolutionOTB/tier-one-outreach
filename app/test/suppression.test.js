@@ -93,6 +93,23 @@ function run(rpcImpl, cached) {
   d2.getElementById('f').dispatchEvent(new dom2.window.Event('submit', { cancelable: true }));
   check('an empty address is refused with a plain message', d2.getElementById('m').textContent === 'Enter a valid email address.');
 
+  // ?t= from a single contact email: no email field, posts the token
+  const sent3 = [];
+  const dom3 = new JSDOM(page, { url: 'https://outreach.benefitsotb.com/unsubscribe.html?t=11111111-2222-4333-8444-555555555555', runScripts: 'dangerously',
+    beforeParse(w3) { w3.fetch = (u, o) => { sent3.push(o.body); return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) }); }; } });
+  const d3 = dom3.window.document;
+  check('a token link hides the email field', d3.getElementById('ef').hidden === true && d3.getElementById('lead').textContent === 'Stop emails from this Aflac associate.');
+  check('the token is taken out of the address bar', dom3.window.location.search === '');
+  d3.getElementById('f').dispatchEvent(new dom3.window.Event('submit', { cancelable: true }));
+  await new Promise(res => setTimeout(res, 50));
+  check('confirm posts the token, not an email', sent3.length === 1 && sent3[0] === JSON.stringify({ t: '11111111-2222-4333-8444-555555555555' }), sent3.join(','));
+  check('the confirmation names the associate, not an address', d3.getElementById('done').hidden === false && d3.getElementById('dline').textContent === 'You will not receive further emails from this Aflac associate through this program.');
+
+  // a malformed token falls back to the email form
+  const dom4 = new JSDOM(page, { url: 'https://outreach.benefitsotb.com/unsubscribe.html?t=not-a-token', runScripts: 'dangerously',
+    beforeParse(w4) { w4.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) }); } });
+  check('a malformed token falls back to the email form', dom4.window.document.getElementById('ef').hidden === false);
+
   const vb = new JSDOM(page).window.document.body; vb.querySelectorAll('script').forEach(x => x.remove());
   const visible = vb.textContent;
   const scriptStrings = (page.match(/<script>([\s\S]*?)<\/script>/)[1].match(/"[^"]*"/g) || []).join(' ');

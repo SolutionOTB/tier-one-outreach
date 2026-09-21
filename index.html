@@ -502,7 +502,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
 
  function renderKit(ch,c,sg){RENDERED[ch]=[];var out='<div class="designs">';
   if(ch==="Email"){var SP=window.Suppression;if(c&&(c.unsubscribed_at||(SP&&SP.blocked(c)))){return out+'<div class="card2" style="padding:16px"><b>'+esc(c.first||"This contact")+' unsubscribed from email.</b> Text and social pieces are still available.</div></div>'}
-   if(c&&SP&&SP.pending(c)){SP.check([c]).then(function(){try{if(st.contacts[st.cur]===c)genForContact()}catch(e){}});return out+'<div class="card2" style="padding:16px">Checking this address</div></div>'}ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});out+=card(NAMES[k]+" ("+e.z+")",'<div style="background:#F5FAFD;padding:10px;overflow:auto">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
+   if(c&&SP&&SP.pending(c)){SP.check([c]).then(function(){try{if(st.contacts[st.cur]===c)genForContact()}catch(e){}});return out+'<div class="card2" style="padding:16px">Checking this address</div></div>'}ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});out+=card(NAMES[k]+" ("+e.z+")",'<div class="emlprev">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
   else if(ch==="Text"){var list=ordered(sg.text).map(function(k){return{k:k,t:KIT.texts[k],lab:NAMES[k]}}).concat(["why_cancer","life_moment","nudge"].map(function(k){return{k:k,t:KIT.cancer_texts[k],lab:"Cancer kit: "+NAMES[k]}}));list.forEach(function(x,i){var body=smsText(x.t,c);RENDERED[ch].push({subject:x.lab,body:body,url:link(),tel:c.phone||""});out+=card(x.lab+" ("+x.t.z+")",'<div style="padding:6px 0">'+smsHTML(body,c)+'</div>',shareRow(ch,i),i===0)})}
   else{var caps=[["general","facebook","Facebook post"],["general","instagram","Instagram post"],["cancer","facebook","Cancer kit: Facebook post"],["cancer","instagram","Cancer kit: Instagram post"]];caps.forEach(function(x,i){var cp=KIT.captions[x[0]][x[1]],img=KIT.images[x[0]+"_"+x[1]],body=capText(cp);RENDERED[ch].push({subject:x[2],body:body,url:link(),img:img});out+=card(x[2]+(cp.z?" ("+cp.z+")":" (form number pending)"),'<div style="padding:12px 14px"><img src="'+img+'" alt="" style="width:100%;max-width:360px;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:10px" onerror="this.style.display=&#39;none&#39;"><pre style="white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.5;margin:0;color:#1D1D1F">'+esc(body)+'</pre></div>',shareRow(ch,i),false)})}
   return out+'</div>'}
@@ -535,7 +535,8 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   var counts={Email:3,Text:6,Social:4};
   var h=linkBox()+addrBox()+'<div class="chtab" id="chtab">'+sel.map(function(ch,i){return '<button class="'+(i===0?"on":"")+'" onclick="showCh(&#39;'+ch+'&#39;,this)">'+ch+' · '+counts[ch]+'</button>'}).join("")+'</div>';
   sel.forEach(function(ch,i){h+='<div class="chpane" data-ch="'+ch+'" style="display:'+(i===0?"block":"none")+'">'+renderKit(ch,c,sg)+'</div>'});
-  $("d_out").innerHTML=h;var btn=$("d_gen");btn.disabled=false;btn.textContent="Refresh"};
+  $("d_out").innerHTML=h;var btn=$("d_gen");btn.disabled=false;btn.textContent="Refresh";
+  uiStyle();setTimeout(emlFit,30);sendHelp()};
 
  var ob0=openBroadcast;
  window.openBroadcast=function(){ob0();var g=document.querySelector("#bcmodal .guard");if(g)g.textContent="Community posts use the approved captions and post images as written. The general post is waiting on its Compliance form number.";var b=$("bcgen");if(b)b.textContent="Show approved posts";var t=$("bctopic");if(t)t.placeholder="Optional note to yourself. The post copy itself does not change."};
@@ -668,6 +669,73 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   contacts:function(){return st.contacts.filter(function(c){return sel[ckey(c)]&&!selBlocked(c)})},
   clear:clearSel};
 
+ /* ---------- phone layout fixes and the one time explainer ---------- */
+ /* Three things the audit found on a phone: the contacts table was wider than the screen, the
+    approved email preview scrolled sideways inside its card, and the card checkbox pulled its row
+    a few pixels past the edge. */
+ function uiStyle(){if($("ui_css"))return;var s=document.createElement("style");s.id="ui_css";
+  s.textContent="@media(max-width:700px){"
+  +"#ctbl thead{display:none}"
+  +"#ctbl,#ctbl tbody,#ctbl tr,#ctbl td{display:block;width:auto}"
+  +"#ctbl tr{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 10px}"
+  +"#ctbl tr:hover td{background:none}"
+  +"#ctbl td{border:0;padding:3px 0;font-size:14px}"
+  +"#ctbl td:first-child{font-size:15px}"
+  +"#ctbl td:empty{display:none}"
+  +"#ctbl td[data-l]:not(:first-child):before{content:attr(data-l) ': ';color:var(--muted);font-size:12px}"
+  +"}"
+  +".emlprev{background:#F5FAFD;padding:10px;overflow:hidden}"
+  +".emlprev .emlfit{transform-origin:top left}"
+  +".pcard .coick{margin:-6px 2px -6px -2px}";
+  document.head.appendChild(s)}
+
+ /* Label the contact cells so the phone layout can show what each line is. */
+ var rcn0=window.renderContacts;
+ window.renderContacts=function(){rcn0();uiStyle();
+  var labels=["Name","Relationship","Email","Phone","Social",""];
+  var b=$("ctbody");if(!b)return;
+  Array.prototype.forEach.call(b.querySelectorAll("tr"),function(tr){
+   Array.prototype.forEach.call(tr.children,function(td,i){if(labels[i])td.setAttribute("data-l",labels[i])})})};
+
+ /* The approved email is a fixed width table. Scale it to fit the card instead of scrolling sideways. */
+ function emlFit(){Array.prototype.forEach.call(document.querySelectorAll(".emlprev"),function(box){
+   var inner=box.firstElementChild;if(!inner)return;
+   inner.classList.add("emlfit");inner.style.transform="";box.style.height="";
+   var avail=box.clientWidth-20,w=inner.scrollWidth||inner.getBoundingClientRect().width;
+   if(!w||w<=avail)return;
+   var k=avail/w;inner.style.transform="scale("+k+")";
+   box.style.height=Math.ceil(inner.getBoundingClientRect().height*k+20)+"px"})}
+ window.addEventListener("resize",function(){clearTimeout(window.__emlT);window.__emlT=setTimeout(emlFit,150)});
+
+ /* One time explainer, remembered on the device. */
+ var SEEN="kit_seen_sendhelp";
+ function seenHelp(){try{return localStorage.getItem(SEEN)==="1"}catch(e){return true}}
+ function markHelp(){try{localStorage.setItem(SEEN,"1")}catch(e){}}
+ function helpStyle(){if($("help_css"))return;var s=document.createElement("style");s.id="help_css";
+  s.textContent="#sendhelp{position:fixed;inset:0;z-index:80;background:rgba(11,18,32,.5);display:flex;align-items:center;justify-content:center;padding:18px}"
+  +"#sendhelp[hidden]{display:none}"
+  +"#sendhelp .hp{background:#fff;border-radius:16px;padding:22px 20px;max-width:420px;width:100%;max-height:86vh;overflow-y:auto}"
+  +"#sendhelp h3{margin:0 0 4px;font-family:Sora,sans-serif;font-size:17px}"
+  +"#sendhelp p.sub{margin:0 0 14px;color:var(--muted);font-size:13.5px}"
+  +"#sendhelp dl{margin:0 0 16px}#sendhelp dt{font-weight:700;font-size:14px;margin-top:12px}"
+  +"#sendhelp dd{margin:2px 0 0;font-size:13.5px;line-height:1.5;color:var(--ink2)}";
+  document.head.appendChild(s)}
+ function sendHelp(force){if(!force&&seenHelp())return;helpStyle();
+  var d=$("sendhelp");
+  if(!d){d=document.createElement("div");d.id="sendhelp";d.hidden=true;d.setAttribute("role","dialog");d.setAttribute("aria-label","How sending works");
+   d.innerHTML='<div class="hp"><h3>How sending works</h3>'
+   +'<p class="sub">Every piece is the Compliance approved copy. You choose how it leaves your phone.</p>'
+   +'<dl><dt>Copy Formatted</dt><dd>Puts the finished email on your clipboard with its layout intact. Paste it into any message.</dd>'
+   +'<dt>Open in Mail</dt><dd>On an iPhone in the app, this fills the whole email in for you, with the people and the subject. Nothing to paste.</dd>'
+   +'<dt>Open in Gmail and Open in Outlook</dt><dd>These fill in the people and the subject, and copy the email at the same time. Paste it into the message body.</dd>'
+   +'<dt>Send as text</dt><dd>Opens your messaging app with the approved text and the contact already there.</dd></dl>'
+   +'<button class="btn" id="hp_ok" style="width:100%">Got it</button></div>';
+   document.body.appendChild(d);
+   $("hp_ok").addEventListener("click",function(){markHelp();d.hidden=true});
+   d.addEventListener("click",function(e){if(e.target===d){markHelp();d.hidden=true}})}
+  d.hidden=false}
+ window.sendHelp=function(){sendHelp(true)};
+
  /* ---------- group email bar ---------- */
  /* Shows while at least one contact is checked on the Center of influence screen. The piece is the
     approved email rendered through the same emailDoc and emailText path as a single send. Two things
@@ -745,7 +813,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function bulkSync(){var b=bulkBar(),list=window.BulkSel.contacts(),n=list.length;
   b.hidden=!n;var st4=$("st4");if(st4)st4.classList.toggle("bulkpad",!!n);document.body.classList.toggle("bulkon",!!n&&!!(st4&&st4.classList.contains("on")));bulkMeasure();
   if(!n){bulkMsg("");return}
-  bulkMailButton();
+  bulkMailButton();sendHelp();
   $("bb_n").textContent=n===1?"1 person selected":n+" people selected";
   bulkCheck()}
  function bulkBuild(){var list=window.BulkSel.contacts(),e=KIT.emails[bulkKey],pc=bulkRecipient(list);

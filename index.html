@@ -669,6 +669,23 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   contacts:function(){return st.contacts.filter(function(c){return sel[ckey(c)]&&!selBlocked(c)})},
   clear:clearSel};
 
+ /* ---------- QR codes point at the counting redirect ---------- */
+ /* The redirect writes one row to to_scans and sends the person on to the associate's link, so the
+    scan shows up on the dashboard. QR codes printed before this still work, but they go through the
+    old redirect and are counted in the old Airtable base, so reprint them from here when you can. */
+ var RDIR="https://pytbtuzeeguqgrhszmpr.functions.supabase.co/r";
+ function trackUrl(where){return RDIR+"?m="+encodeURIComponent("QR-"+(st.url||"chris")+"-"+where)+"&u="+encodeURIComponent(link())}
+ window.renderMainQR=function(){var el=$("qrmain");if(!el||!window.QRCode){if(el)setTimeout(window.renderMainQR,500);return}
+  el.innerHTML="";new QRCode(el,{text:trackUrl("link"),width:124,height:124,colorDark:"#0B1220",colorLight:"#ffffff"})};
+ window.makeCampaignQR=function(){if(!window.QRCode){toast("QR still loading");return}
+  var lab=(($("qrlabel")||{}).value||"campaign").toLowerCase().replace(/[^a-z0-9-]/g,"-");
+  var el=$("qrcamp");if(!el)return;el.innerHTML="";
+  var box=document.createElement("div");box.style.cssText="display:inline-block;background:#fff;padding:8px;border:1px solid var(--line);border-radius:10px";el.appendChild(box);
+  var u=trackUrl(lab);
+  new QRCode(box,{text:u,width:124,height:124,colorDark:"#0B1220",colorLight:"#ffffff"});
+  el.insertAdjacentHTML("beforeend",'<div class="help" style="margin-top:6px;word-break:break-all">Tracked: '+esc(u)+'</div>');
+  toast("Tracked QR created")};
+
  /* ---------- phone layout fixes and the one time explainer ---------- */
  /* Three things the audit found on a phone: the contacts table was wider than the screen, the
     approved email preview scrolled sideways inside its card, and the card checkbox pulled its row
@@ -686,7 +703,10 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   +"}"
   +".emlprev{background:#F5FAFD;padding:10px;overflow:hidden}"
   +".emlprev .emlfit{transform-origin:top left}"
-  +".pcard .coick{margin:-6px 2px -6px -2px}";
+  +".pcard .coick{margin:-6px 2px -6px -2px}"
+  +".steps{padding-right:22px}"
+  +"#d_notes,#d_notes+.help,label[for=d_notes]{display:none}"
+  +"#d_gen{display:none}";
   document.head.appendChild(s)}
 
  /* Label the contact cells so the phone layout can show what each line is. */
@@ -932,6 +952,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   suppLoadCache();suppCheck(st.contacts);
   login();
   try{rc0()}catch(e){}
+  try{dashTab()}catch(e){}
   if(agent.link&&st.contacts.length){var t=$("tabnav");if(t)t.style.display="flex";showTab("outreach")}
   checkVersion()}
 
@@ -1141,6 +1162,115 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   +'<label class="fl">Your name (appears in every email and text)</label><div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"><input id="cl_name2" value="'+esc(window.AGENTNAME||"")+'" style="flex:1;min-width:200px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit"><button class="btn sm" style="height:36px" onclick="cloudRename()">Save</button></div>'
   +'<button class="btn ghost sm" onclick="cloudSignOut()">Sign out</button></div>')};
  window.cloudRename=async function(){var n=($("cl_name2").value||"").trim();if(n.length<2){toast("Enter your name");return}window.AGENTNAME=n;await savePrefsRemote();toast("Name saved")};
+
+ /* ---------- dashboard ---------- */
+ /* Counts what the app can actually know. A piece counts when it is opened or copied; the app
+    cannot see whether the associate pressed send inside Gmail, Outlook or Mail. Scans and copies
+    are exact. Admins get the same numbers for every associate through to_admin_overview, which
+    returns counts only, never contact rows. */
+ var dashLoaded=false;
+ function dnum(n){return (n||0).toLocaleString()}
+ function dayKey(d){return new Date(d).toISOString().slice(0,10)}
+ function dashStyle(){if($("dash_css"))return;var s=document.createElement("style");s.id="dash_css";
+  s.textContent="#tabDash .dgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:0 0 18px}"
+  +"#tabDash .dtile{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px}"
+  +"#tabDash .dtile .v{font-family:Sora,sans-serif;font-weight:700;font-size:26px;line-height:1.1}"
+  +"#tabDash .dtile .k{font-size:12.5px;color:var(--muted);margin-top:4px}"
+  +"#tabDash .dcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:0 0 18px}"
+  +"#tabDash h3{margin:0 0 12px;font-family:Sora,sans-serif;font-size:16px}"
+  +"#tabDash .brow{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:13.5px}"
+  +"#tabDash .brow .lbl{flex:0 0 40%;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+  +"#tabDash .brow .bar{flex:1;height:10px;background:#eef3f8;border-radius:6px;overflow:hidden}"
+  +"#tabDash .brow .bar span{display:block;height:100%;background:#0070A9;border-radius:6px}"
+  +"#tabDash .brow .n{flex:0 0 auto;font-weight:700;font-variant-numeric:tabular-nums}"
+  +"#tabDash .days{display:flex;align-items:flex-end;gap:3px;height:70px;margin-top:6px}"
+  +"#tabDash .days i{flex:1;background:#0070A9;border-radius:3px 3px 0 0;min-height:2px;opacity:.85}"
+  +"#tabDash .dnote{font-size:12.5px;color:var(--muted);line-height:1.5}"
+  +"#tabDash table{width:100%;border-collapse:collapse;font-size:13.5px}"
+  +"#tabDash th{text-align:left;font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}"
+  +"#tabDash td{padding:9px 10px;border-bottom:1px solid #eef2f6;white-space:nowrap}"
+  +"#tabDash .tw{overflow-x:auto}"
+  +"#tabDash .empty{color:var(--muted);font-size:14px;padding:6px 0}";
+  document.head.appendChild(s)}
+ function bars(rows,total){if(!rows.length)return '<div class="empty">Nothing yet.</div>';
+  var max=Math.max.apply(null,rows.map(function(r){return r[1]}))||1;
+  return rows.map(function(r){return '<div class="brow"><span class="lbl" title="'+esc(r[0])+'">'+esc(r[0])+'</span>'
+   +'<span class="bar"><span style="width:'+Math.round(r[1]/max*100)+'%"></span></span>'
+   +'<span class="n">'+dnum(r[1])+'</span></div>'}).join("")}
+ function dayChart(rows,days){var end=new Date(),keys=[],counts={};
+  for(var i=days-1;i>=0;i--){var d=new Date(end.getTime()-i*86400000);keys.push(dayKey(d));counts[dayKey(d)]=0}
+  rows.forEach(function(r){var k=dayKey(r);if(k in counts)counts[k]++});
+  var max=Math.max.apply(null,keys.map(function(k){return counts[k]}))||1;
+  return '<div class="days">'+keys.map(function(k){var h=Math.round(counts[k]/max*100);
+   return '<i style="height:'+Math.max(2,h)+'%" title="'+k+": "+counts[k]+'"></i>'}).join("")+'</div>';}
+ function chanName(ch){return ch==="Email bulk"?"Group email":ch}
+ async function renderDash(){dashStyle();var el=$("tabDash");if(!el)return;
+  if(!sb||!user){el.innerHTML='<div class="dcard"><div class="empty">Sign in to see your numbers.</div></div>';return}
+  if(!dashLoaded)el.innerHTML='<div class="dcard"><div class="empty">Loading your numbers.</div></div>';
+  var sends=[],scans=[];
+  try{var r=await sb.from("to_sends").select("channel,action,piece,sent_at").eq("agent_id",user.id).order("sent_at",{ascending:false}).limit(3000);if(r.error)throw r.error;sends=r.data||[]}catch(e){}
+  try{var q=await sb.from("to_scans").select("marker,scanned_at").order("scanned_at",{ascending:false}).limit(3000);if(!q.error)scans=q.data||[]}catch(e){}
+  dashLoaded=true;
+  var contacts=st.contacts.length,unsub=st.contacts.filter(function(c){return c.unsubscribed_at}).length;
+  var reached={};sends.forEach(function(s){if(s.piece)reached[s.piece]=1});
+  var byChan={},byPiece={};
+  sends.forEach(function(s){var c=chanName(s.channel||"Other");byChan[c]=(byChan[c]||0)+1;var p=s.piece||"Untitled";byPiece[p]=(byPiece[p]||0)+1});
+  var sortRows=function(o){return Object.keys(o).map(function(k){return [k,o[k]]}).sort(function(a,b){return b[1]-a[1]}).slice(0,8)};
+  var last=sends[0]?new Date(sends[0].sent_at).toLocaleDateString():"None yet";
+  el.innerHTML='<div class="wrap" style="padding-top:18px">'
+   +'<h2 class="t" style="margin:0 0 4px">Your numbers</h2>'
+   +'<p class="lead" style="margin:0 0 16px">Everything you have done through the studio.</p>'
+   +'<div class="dgrid">'
+   +'<div class="dtile"><div class="v">'+dnum(contacts)+'</div><div class="k">Contacts</div></div>'
+   +'<div class="dtile"><div class="v">'+dnum(sends.length)+'</div><div class="k">Pieces started</div></div>'
+   +'<div class="dtile"><div class="v">'+dnum(scans.length)+'</div><div class="k">QR scans</div></div>'
+   +'<div class="dtile"><div class="v">'+dnum(unsub)+'</div><div class="k">Unsubscribed</div></div>'
+   +'</div>'
+   +'<div class="dcard"><h3>Last 30 days</h3>'+dayChart(sends.map(function(s){return s.sent_at}),30)
+   +'<div class="dnote" style="margin-top:8px">Last piece: '+esc(last)+'</div></div>'
+   +'<div class="dcard"><h3>By channel</h3>'+bars(sortRows(byChan))+'</div>'
+   +'<div class="dcard"><h3>By piece</h3>'+bars(sortRows(byPiece))+'</div>'
+   +'<div class="dcard"><h3>QR scans</h3>'+(scans.length?dayChart(scans.map(function(s){return s.scanned_at}),30):'<div class="empty">No scans yet. Share your QR code from Share and QR.</div>')+'</div>'
+   +'<p class="dnote">A piece counts when you open or copy it here. The studio cannot see whether you pressed send inside Gmail, Outlook or your mail app, so treat these as pieces started, not delivered.</p>'
+   +'<div id="dash_admin"></div></div>';
+  renderAdminDash()}
+ async function renderAdminDash(){var box=$("dash_admin");if(!box||!sb)return;
+  var rows=[];try{var r=await sb.rpc("to_admin_overview");if(r.error)throw r.error;rows=r.data||[]}catch(e){return}
+  if(!rows.length)return;
+  var tot=function(k){return rows.reduce(function(a,b){return a+(+b[k]||0)},0)};
+  box.innerHTML='<h2 class="t" style="margin:26px 0 4px">All associates</h2>'
+   +'<p class="lead" style="margin:0 0 16px">Everyone signed in to the studio.</p>'
+   +'<div class="dgrid">'
+   +'<div class="dtile"><div class="v">'+dnum(rows.length)+'</div><div class="k">Associates</div></div>'
+   +'<div class="dtile"><div class="v">'+dnum(tot("contacts"))+'</div><div class="k">Contacts</div></div>'
+   +'<div class="dtile"><div class="v">'+dnum(tot("pieces"))+'</div><div class="k">Pieces started</div></div>'
+   +'<div class="dtile"><div class="v">'+dnum(tot("scans"))+'</div><div class="k">QR scans</div></div>'
+   +'</div>'
+   +'<div class="dcard"><h3>By associate</h3><div class="tw"><table><thead><tr>'
+   +'<th>Associate</th><th>Contacts</th><th>Pieces</th><th>Email</th><th>Text</th><th>Posts</th><th>Scans</th><th>Unsub</th><th>Last active</th>'
+   +'</tr></thead><tbody>'
+   +rows.map(function(a){return '<tr><td><b>'+esc(a.name||a.email||"Unnamed")+'</b><div class="dnote">'+esc(a.email||"")+'</div></td>'
+    +'<td>'+dnum(a.contacts)+'</td><td>'+dnum(a.pieces)+'</td><td>'+dnum(a.email_pieces)+'</td><td>'+dnum(a.text_pieces)+'</td>'
+    +'<td>'+dnum(a.social_pieces)+'</td><td>'+dnum(a.scans)+'</td><td>'+dnum(a.unsubscribed)+'</td>'
+    +'<td>'+(a.last_activity?new Date(a.last_activity).toLocaleDateString():"None")+'</td></tr>'}).join("")
+   +'</tbody></table></div></div>'}
+ function dashTab(){if($("tabDash"))return;
+  var nav=$("tabnav");if(!nav)return;
+  var b=document.createElement("button");b.className="tb";b.setAttribute("data-t","dash");b.textContent="Dashboard";
+  b.onclick=function(){showTab("dash")};
+  var acct=nav.querySelector('[data-t="account"]');
+  if(acct)nav.insertBefore(b,acct);else nav.appendChild(b);
+  var d=document.createElement("div");d.className="wrap";d.id="tabDash";d.style.display="none";
+  var host=$("tabAccount");if(host&&host.parentNode)host.parentNode.insertBefore(d,host);else document.body.appendChild(d)}
+ var showTab0=window.showTab;
+ window.showTab=function(t){dashTab();
+  if(t!=="dash"){var d=$("tabDash");if(d)d.style.display="none";return showTab0(t)}
+  showTab0("account");
+  $("tabAccount").style.display="none";
+  var d=$("tabDash");if(d)d.style.display="block";
+  var nav=$("tabnav");if(nav)Array.prototype.forEach.call(nav.querySelectorAll(".tb"),function(x){x.classList.toggle("on",x.getAttribute("data-t")==="dash")});
+  window.scrollTo(0,0);renderDash()};
+ window.renderDash=renderDash;
 
  /* ---------- version gate ---------- */
  async function checkVersion(){try{var r=await sb.from("to_settings").select("value").eq("key","min_version").maybeSingle();var min=parseInt((r.data&&r.data.value)||"0",10);if(min>BUILD){var o=document.createElement("div");o.style.cssText="position:fixed;inset:0;background:rgba(28,36,48,.7);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px";o.innerHTML='<div style="background:#fff;border-radius:14px;padding:28px;max-width:420px;text-align:center"><h3 style="margin:0 0 8px;font-family:Sora,sans-serif">Update available</h3><p style="margin:0 0 16px">A newer version of the studio is ready. Reload to continue.</p><button class="btn" onclick="location.href=location.pathname+&#39;?v=&#39;+Date.now()">Reload</button></div>';document.body.appendChild(o)}}catch(e){}}

@@ -10,4 +10,10 @@ Supabase MCP, then keep the file here in step with it.
   list. `verify_jwt` is off because a consumer clicks it. The service role key comes from the function
   environment.
 
-The older `unsub` function (per contact token) is deployed but not saved here yet.
+* `migrations/20260921_to_scans_and_overview.sql`: the QR scan table and `to_admin_overview`, the
+  counts behind the admin dashboard. The function answers nothing unless the caller is an admin.
+* `functions/r/index.ts`: the QR redirect. It writes one scan row and sends the person to the
+  associate's link. QR codes made in the app point here.
+
+The older `unsub` function (per contact token) and the `api` function (used by the training site,
+and by QR codes printed before 2026-09-21) are deployed but not saved here yet.

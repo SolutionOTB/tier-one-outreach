@@ -7,3 +7,6 @@ project(':capacitor-community-contacts').projectDir = new File('../node_modules/
 
 include ':capacitor-browser'
 project(':capacitor-browser').projectDir = new File('../node_modules/@capacitor/browser/android')
+
+include ':capacitor-email-composer'
+project(':capacitor-email-composer').projectDir = new File('../node_modules/capacitor-email-composer/android')

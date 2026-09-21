@@ -126,6 +126,43 @@ const eligible = (t) => Array.from(t.d.querySelectorAll('#coi .pcard')).map((d, 
   t.w.eval('closeDrawer(); goStep(2);');
   check('the bar is not shown on the Contacts step', t.d.getElementById('st4').classList.contains('on') === false);
 
+  // iPhone with the native shell: the mail composer fills the formatted email in, no paste
+  {
+    const IPH = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+    const composed = [];
+    const p = boot(IPH);
+    p.w.MailComposer = { available: () => true, ready: () => Promise.resolve(true), open: (o) => { composed.push(o); return Promise.resolve(); } };
+    const pe = Array.from(p.d.querySelectorAll('#coi .pcard')).map((d, i) => ({ i, c: p.w.st.contacts[i] })).filter(x => x.c.email);
+    const tap = (el) => el.dispatchEvent(new p.w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    tap(p.d.querySelectorAll('#coi .pcard .coick input')[pe[0].i]);
+    tap(p.d.querySelectorAll('#coi .pcard .coick input')[pe[1].i]);
+    await tick(50);
+    const mailBtn = p.d.getElementById('bb_mail');
+    check('iPhone app: an Open in Mail button appears first', !!mailBtn && mailBtn.textContent === 'Open in Mail' && p.d.getElementById('bb_btns').firstChild === mailBtn);
+    check('iPhone app: the note stops telling them to paste for Mail', /Mail fills the email in for you/.test(p.d.getElementById('bb_note').textContent));
+    tap(mailBtn);
+    await tick(50);
+    const o = composed[0];
+    check('iPhone app: the composer gets the formatted email', composed.length === 1 && o.isHtml === true && /<html/i.test(o.body) && /Hi there,/.test(o.body));
+    check('iPhone app: your address in To, the people in Bcc, the approved subject', o.to.join(',') === 'associate@example.com' && o.bcc.join(',') === [pe[0].c.email, pe[1].c.email].join(',') && o.cc.length === 0 && o.subject === p.w.KIT.emails.intro.subject);
+    check('iPhone app: nothing is copied and no tab opens for Mail', p.clip.length === 0 && p.opened.length === 0);
+    check('iPhone app: the send is logged as mail', p.logged.length === 1 && p.logged[0].act === 'mail' && p.logged[0].n === 2);
+    const cc3 = p.d.querySelector('#bulkbar input[value=cc]'); cc3.checked = true; cc3.dispatchEvent(new p.w.Event('change'));
+    tap(mailBtn); await tick(50);
+    check('iPhone app: Cc carries through to the composer', composed[1].cc.length === 2 && composed[1].bcc.length === 0);
+    // Gmail and Outlook still copy and paste on the same phone
+    tap(p.d.getElementById('bb_gmail')); await tick(50);
+    check('iPhone app: Gmail still copies first', p.clip.length === 1);
+
+    // no mail account set up: no button, nothing breaks
+    const p2 = boot(IPH);
+    p2.w.MailComposer = { available: () => true, ready: () => Promise.resolve(false), open: () => Promise.reject(new Error('no account')) };
+    const pe2 = Array.from(p2.d.querySelectorAll('#coi .pcard')).map((d, i) => ({ i, c: p2.w.st.contacts[i] })).filter(x => x.c.email);
+    p2.d.querySelectorAll('#coi .pcard .coick input')[pe2[0].i].dispatchEvent(new p2.w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    await tick(50);
+    check('iPhone with no mail account: no Mail button', !p2.d.getElementById('bb_mail') && /Paste the email into the message/.test(p2.d.getElementById('bb_note').textContent));
+  }
+
   // phones: the buttons open the mail app, because the web compose links drop the addresses there
   const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
   const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Mobile Safari/537.36';

@@ -705,8 +705,8 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
    +'<button class="bbclear" type="button" id="bb_clear" aria-label="Clear selection">Clear</button></div>'
    +'<div class="bbnote" id="bb_ccnote" hidden>With Cc, everyone sees who else got the email.</div>'
    +'<select id="bb_piece" aria-label="Approved email">'+keys.map(function(k){var e=KIT.emails[k];return '<option value="'+k+'">'+esc(NAMES[k]||k)+' ('+esc(e.z)+')</option>'}).join("")+'</select>'
-   +'<div class="bbrow bbbtns"><button class="btn sm" type="button" id="bb_copy">Copy Formatted</button><button class="btn sm" type="button" id="bb_gmail">Open in Gmail</button><button class="btn sm" type="button" id="bb_outlook">Open in Outlook</button></div>'
-   +'<div class="bbnote">'+(isMobile()?"These open your mail app with the addresses and the subject filled in. Paste the email into the message.":"Outlook fills in the addresses only for an Outlook or Microsoft 365 mailbox.")+'</div>'
+   +'<div class="bbrow bbbtns" id="bb_btns"><button class="btn sm" type="button" id="bb_copy">Copy Formatted</button><button class="btn sm" type="button" id="bb_gmail">Open in Gmail</button><button class="btn sm" type="button" id="bb_outlook">Open in Outlook</button></div>'
+   +'<div class="bbnote" id="bb_note">'+(isMobile()?"These open your mail app with the addresses and the subject filled in. Paste the email into the message.":"Outlook fills in the addresses only for an Outlook or Microsoft 365 mailbox.")+'</div>'
    +'<div class="bbmsg" id="bb_msg" role="status" aria-live="polite"></div>'
    +'</div>';
   var host=$("st4")||document.body;host.appendChild(b);
@@ -714,11 +714,22 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   $("bb_piece").addEventListener("change",function(){bulkKey=this.value});
   Array.prototype.forEach.call(b.querySelectorAll("input[name=bb_mode]"),function(r){r.addEventListener("change",function(){if(r.checked){bulkMode=r.value;$("bb_ccnote").hidden=bulkMode!=="cc";bulkMeasure()}})});
   $("bb_copy").addEventListener("click",function(){bulkSend("html")});
+  bulkMailButton();
   $("bb_gmail").addEventListener("click",function(){bulkSend("gmail")});
   $("bb_outlook").addEventListener("click",function(){bulkSend("outlook")});
   return b}
  function bulkMeasure(){var b=$("bulkbar");if(b&&!b.hidden)document.body.style.setProperty("--bulkh",b.offsetHeight+"px")}
  window.addEventListener("resize",bulkMeasure);
+ /* On an iPhone with a mail account the composer fills the formatted email in for the associate,
+    so that button goes first and the note stops telling them to paste. */
+ function bulkMailButton(){var M=window.MailComposer;if(!M||!M.available())return;
+  M.ready().then(function(ok){if(!ok||$("bb_mail"))return;
+   var row=$("bb_btns");if(!row)return;
+   var b=document.createElement("button");b.className="btn sm";b.type="button";b.id="bb_mail";b.textContent="Open in Mail";
+   b.addEventListener("click",function(){bulkSend("mail")});
+   row.insertBefore(b,row.firstChild);
+   var note=$("bb_note");if(note)note.textContent="Mail fills the email in for you. Gmail and Outlook copy it instead, so paste it into the message.";
+   bulkMeasure()})}
  function bulkMsg(t){var m=$("bb_msg");if(m)m.textContent=t||"";bulkMeasure()}
  function bulkBusy(on){["bb_copy","bb_gmail","bb_outlook"].forEach(function(id){var x=$(id);if(x)x.disabled=!!on})}
  /* Checks the picked addresses against the unsubscribe lists before anything can be sent. The
@@ -734,6 +745,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function bulkSync(){var b=bulkBar(),list=window.BulkSel.contacts(),n=list.length;
   b.hidden=!n;var st4=$("st4");if(st4)st4.classList.toggle("bulkpad",!!n);document.body.classList.toggle("bulkon",!!n&&!!(st4&&st4.classList.contains("on")));bulkMeasure();
   if(!n){bulkMsg("");return}
+  bulkMailButton();
   $("bb_n").textContent=n===1?"1 person selected":n+" people selected";
   bulkCheck()}
  function bulkBuild(){var list=window.BulkSel.contacts(),e=KIT.emails[bulkKey],pc=bulkRecipient(list);
@@ -755,6 +767,11 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   if(SP&&list.some(function(c){return SP.pending(c)})){bulkCheck();return}
   var d=bulkBuild(),own=(window.cloudAgentEmail&&window.cloudAgentEmail())||"";
   var to=d.list.map(function(c){return String(c.email||"").trim()}).filter(Boolean).join(",");
+  if(act==="mail"){var addr=d.list.map(function(c){return String(c.email||"").trim()}).filter(Boolean);
+   window.MailComposer.open({to:own?[own]:[],cc:bulkMode==="cc"?addr:[],bcc:bulkMode==="bcc"?addr:[],subject:d.subject||"",body:d.html,isHtml:true})
+    .then(function(){bulkMsg("")},function(){bulkCopy(d);bulkMsg("Mail did not open. Use Gmail or Outlook and paste the email in.")});
+   if(window.logBulkSend)window.logBulkSend(d.list,"mail",d.subject,d.e.z);
+   return}
   bulkCopy(d);
   if(act==="gmail"||act==="outlook"){var t=bulkTarget(act,own,to,d.subject);
    if(t.how==="web")openL(t.url);
@@ -1018,6 +1035,20 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
    var f=$("file");if(f)f.click()}
  };
  function wireBridge(){var pb=$("pickBtn");if(pb){var how=Contacts.available();pb.style.display=how==="file"?"none":"";pb.textContent="Add from contacts";pb.onclick=function(){Contacts.pick()}}}
+
+ /* ---------- native mail composer ---------- */
+ /* capacitor-email-composer opens the iOS mail sheet with the formatted email, the addresses and the
+    subject already in it, so nothing has to be pasted. iOS only, and only when the phone has a mail
+    account set up. Everywhere else the buttons keep the copy and paste path. */
+ var mailPlug,mailAcct=null;
+ function mailC(){if(mailPlug===undefined||mailPlug===null)mailPlug=capPlugin("EmailComposer")||false;return mailPlug||null}
+ window.MailComposer={
+  available:function(){var C=window.Capacitor;return !!(C&&C.getPlatform&&C.getPlatform()==="ios"&&mailC())},
+  ready:function(){if(!this.available())return Promise.resolve(false);
+   if(mailAcct!==null)return Promise.resolve(mailAcct);
+   return mailC().hasAccount().then(function(r){mailAcct=!!(r&&r.hasAccount);return mailAcct},function(){mailAcct=false;return false})},
+  open:function(o){var P=mailC();return P?P.open(o):Promise.reject(new Error("no mail composer"))}
+ };
 
  /* ---------- links inside the app shell ---------- */
  /* Two hosts open in the in app browser: the buy.aflac.com link in every approved piece and the

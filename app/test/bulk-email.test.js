@@ -13,11 +13,12 @@ function check(label, cond, extra) {
   if (!cond) process.exitCode = 1;
 }
 
-function boot() {
+function boot(ua) {
   const opened = [], clip = [], logged = [];
   const dom = new JSDOM(html, {
     url: 'https://outreach.benefitsotb.com/', runScripts: 'dangerously', pretendToBeVisual: true,
     beforeParse(w) {
+      if (ua) Object.defineProperty(w.navigator, 'userAgent', { value: ua, configurable: true });
       w.open = (u) => { opened.push(u); return null; };
       w.ClipboardItem = function (items) { this.items = items; };
       Object.defineProperty(w.navigator, 'clipboard', { value: {
@@ -124,6 +125,31 @@ const eligible = (t) => Array.from(t.d.querySelectorAll('#coi .pcard')).map((d, 
   // no bar on other screens
   t.w.eval('closeDrawer(); goStep(2);');
   check('the bar is not shown on the Contacts step', t.d.getElementById('st4').classList.contains('on') === false);
+
+  // phones: the buttons open the mail app, because the web compose links drop the addresses there
+  const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+  const ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140 Mobile Safari/537.36';
+  for (const [name, ua] of [['iPhone', IPHONE], ['Android', ANDROID]]) {
+    const p = boot(ua);
+    const pe = Array.from(p.d.querySelectorAll('#coi .pcard')).map((d, i) => ({ i, c: p.w.st.contacts[i] })).filter(x => x.c.email);
+    p.d.querySelectorAll('#coi .pcard .coick input')[pe[0].i].dispatchEvent(new p.w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    p.d.querySelectorAll('#coi .pcard .coick input')[pe[1].i].dispatchEvent(new p.w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    const addrs = [pe[0].c.email, pe[1].c.email].join(',');
+    const gm = p.w.BulkSel.target('gmail'), ol = p.w.BulkSel.target('outlook');
+    if (name === 'iPhone') {
+      check('iPhone: Open in Gmail opens the Gmail app', gm.how === 'app' && gm.url.indexOf('googlegmail://co?to=associate%40example.com') === 0, gm.url);
+      check('iPhone: with the people in Bcc and the approved subject', gm.url.indexOf('&bcc=' + encodeURIComponent(addrs)) > 0 && gm.url.indexOf('&subject=' + encodeURIComponent(p.w.KIT.emails.intro.subject)) > 0);
+      check('iPhone: it falls back to the mail app', gm.fallback.indexOf('mailto:associate%40example.com?bcc=') === 0, gm.fallback);
+      check('iPhone: Open in Outlook opens the Outlook app', ol.how === 'app' && ol.url.indexOf('ms-outlook://compose?to=') === 0, ol.url);
+    } else {
+      check('Android: the buttons open the mail app', gm.how === 'mailto' && ol.how === 'mailto');
+      check('Android: your address in To, the people in Bcc, the approved subject', gm.url.indexOf('mailto:associate%40example.com?bcc=' + encodeURIComponent(addrs) + '&subject=' + encodeURIComponent(p.w.KIT.emails.intro.subject)) === 0, gm.url);
+    }
+    check(name + ': the note tells them to paste', /These open your mail app with the addresses and the subject filled in\. Paste the email into the message\./.test(p.d.getElementById('bulkbar').textContent));
+    const cc2 = p.d.querySelector('#bulkbar input[value=cc]'); cc2.checked = true; cc2.dispatchEvent(new p.w.Event('change'));
+    check(name + ': Cc carries through to the mail app link', p.w.BulkSel.target('gmail').url.indexOf('cc=' + encodeURIComponent(addrs)) > 0 && p.w.BulkSel.target('gmail').url.indexOf('bcc=') < 0);
+  }
+  check('a computer still gets the web compose link', t.w.BulkSel.target('gmail').how === 'web' && t.w.BulkSel.target('outlook').url.indexOf('https://outlook.office.com/mail/deeplink/compose') === 0);
 
   // copy rules for the bar
   const shown = bar().textContent + ' ' + Array.from(bar().querySelectorAll('option')).map(o => o.textContent).join(' ');

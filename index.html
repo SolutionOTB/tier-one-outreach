@@ -661,6 +661,10 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   coiFilter();
   var SP=window.Suppression;if(SP){var pend=st.contacts.filter(function(c){return SP.pending(c)});if(pend.length)SP.check(pend).then(function(){window.renderCOI()})}};
  window.BulkSel={cap:SEL_CAP,
+  target:function(act){var list=window.BulkSel.contacts();
+   return bulkTarget(act,(window.cloudAgentEmail&&window.cloudAgentEmail())||"",
+    list.map(function(c){return String(c.email||"").trim()}).filter(Boolean).join(","),
+    (KIT.emails[bulkKey]||{}).subject)},
   contacts:function(){return st.contacts.filter(function(c){return sel[ckey(c)]&&!selBlocked(c)})},
   clear:clearSel};
 
@@ -702,7 +706,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
    +'<div class="bbnote" id="bb_ccnote" hidden>With Cc, everyone sees who else got the email.</div>'
    +'<select id="bb_piece" aria-label="Approved email">'+keys.map(function(k){var e=KIT.emails[k];return '<option value="'+k+'">'+esc(NAMES[k]||k)+' ('+esc(e.z)+')</option>'}).join("")+'</select>'
    +'<div class="bbrow bbbtns"><button class="btn sm" type="button" id="bb_copy">Copy Formatted</button><button class="btn sm" type="button" id="bb_gmail">Open in Gmail</button><button class="btn sm" type="button" id="bb_outlook">Open in Outlook</button></div>'
-   +'<div class="bbnote">Outlook fills in the addresses only for an Outlook or Microsoft 365 mailbox.</div>'
+   +'<div class="bbnote">'+(isMobile()?"These open your mail app with the addresses and the subject filled in. Paste the email into the message.":"Outlook fills in the addresses only for an Outlook or Microsoft 365 mailbox.")+'</div>'
    +'<div class="bbmsg" id="bb_msg" role="status" aria-live="polite"></div>'
    +'</div>';
   var host=$("st4")||document.body;host.appendChild(b);
@@ -735,14 +739,27 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  function bulkBuild(){var list=window.BulkSel.contacts(),e=KIT.emails[bulkKey],pc=bulkRecipient(list);
   return {list:list,e:e,subject:e.subject,html:emailDoc(e,pc),text:emailText(e,pc)}}
  function bulkCopy(d){try{navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([d.html],{type:"text/html"}),"text/plain":new Blob([d.text],{type:"text/plain"})})]).then(function(){toast("Formatted email copied. Paste it into the message body.")},function(){window.__copy(d.text)})}catch(x){window.__copy(d.text)}}
+ /* Where the buttons go, by device, matching what the single contact buttons already do.
+    On a computer the web compose page. On a phone the mail app, because the web compose links
+    drop the addresses there. The formatted email is on the clipboard either way. */
+ function bulkTarget(act,own,to,su){
+  var q="to="+encodeURIComponent(own)+"&"+bulkMode+"="+encodeURIComponent(to)+"&subject="+encodeURIComponent(su||"");
+  var mt="mailto:"+encodeURIComponent(own)+"?"+bulkMode+"="+encodeURIComponent(to)+"&subject="+encodeURIComponent(su||"");
+  if(!isMobile())return {how:"web",url:act==="gmail"
+   ?"https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(own)+"&"+bulkMode+"="+encodeURIComponent(to)+"&su="+encodeURIComponent(su||"")
+   :"https://outlook.office.com/mail/deeplink/compose?"+q};
+  if(isIOS())return {how:"app",url:(act==="gmail"?"googlegmail://co?":"ms-outlook://compose?")+q,fallback:mt};
+  return {how:"mailto",url:mt}}
  function bulkSend(act){var SP=window.Suppression,list=window.BulkSel.contacts();
   if(!list.length)return;
   if(SP&&list.some(function(c){return SP.pending(c)})){bulkCheck();return}
   var d=bulkBuild(),own=(window.cloudAgentEmail&&window.cloudAgentEmail())||"";
   var to=d.list.map(function(c){return String(c.email||"").trim()}).filter(Boolean).join(",");
   bulkCopy(d);
-  if(act==="gmail")openL("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(own)+"&"+bulkMode+"="+encodeURIComponent(to)+"&su="+encodeURIComponent(d.subject||""));
-  else if(act==="outlook")openL("https://outlook.office.com/mail/deeplink/compose?to="+encodeURIComponent(own)+"&"+bulkMode+"="+encodeURIComponent(to)+"&subject="+encodeURIComponent(d.subject||""));
+  if(act==="gmail"||act==="outlook"){var t=bulkTarget(act,own,to,d.subject);
+   if(t.how==="web")openL(t.url);
+   else if(t.how==="app")openApp(t.url,t.fallback);
+   else location.href=t.url}
   if(window.logBulkSend)window.logBulkSend(d.list,act,d.subject,d.e.z);
   bulkMsg("")}
  window.addEventListener("coiselection",function(){bulkSync()});

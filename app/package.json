@@ -8,7 +8,7 @@
     "sync": "node build-www.js && cap sync",
     "sync:android": "node build-www.js && cap sync android",
     "sync:ios": "node build-www.js && cap sync ios",
-    "test": "node test/contacts-bridge.test.js && node test/shell-links.test.js && node test/qr-fallback.test.js && node test/suppression.test.js && node test/coi-select.test.js && node test/bulk-email.test.js && node test/ui-fixes.test.js && node test/dashboard.test.js && node test/social-share.test.js",
+    "test": "node test/contacts-bridge.test.js && node test/shell-links.test.js && node test/qr-fallback.test.js && node test/suppression.test.js && node test/coi-select.test.js && node test/bulk-email.test.js && node test/ui-fixes.test.js && node test/dashboard.test.js && node test/social-share.test.js && node test/library.test.js",
     "icons": "capacitor-assets generate --ios --android"
   },
   "dependencies": {

@@ -724,6 +724,14 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   contacts:function(){return st.contacts.filter(function(c){return sel[ckey(c)]&&!selBlocked(c)})},
   clear:clearSel};
 
+ /* The Library tab renders through these, so there is one copy of every piece renderer. */
+ window.LIBNAMES=NAMES;
+ window.LIBEMAIL=emailHTMLKit;
+ window.LIBEMAILTEXT=emailText;
+ window.LIBSMS=smsText;
+ window.LIBCAP=function(cp,c){var L=cp.lines.slice();L.push(cp.closing);if(cp.z)L.push(cp.z+" "+cp.exp);return fill(L.join(String.fromCharCode(10)),c)};
+ window.emlFitAll=function(){emlFit()};
+
  /* ---------- QR codes point at the counting redirect ---------- */
  /* The redirect writes one row to to_scans and sends the person on to the associate's link, so the
     scan shows up on the dashboard. QR codes printed before this still work, but they go through the
@@ -764,7 +772,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   +"#d_gen{display:none}"
   /* 1: all four tabs visible on a phone, two rows, so nothing hides off the edge */
   +"@media(max-width:560px){.tabs{flex-wrap:wrap;row-gap:0;padding:0 8px}"
-  +".tabs .tb{flex:1 1 calc(50% - 4px);justify-content:center;text-align:center}}"
+  +".tabs .tb{flex:1 1 calc(33.333% - 4px);justify-content:center;text-align:center;font-size:12.5px;padding:0 6px}}"
   /* 6: the panel used to fade in from half opacity, so its text sat on top of the list behind it */
   +"@keyframes kitsl{from{transform:translateX(36px)}to{transform:none}}"
   +".drawer .dpan{animation:kitsl .22s ease;opacity:1}"
@@ -1017,8 +1025,9 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   suppLoadCache();suppCheck(st.contacts);
   login();
   try{rc0()}catch(e){}
-  try{dashTab()}catch(e){}
-  if(agent.link&&st.contacts.length){var t=$("tabnav");if(t)t.style.display="flex";showTab("outreach")}
+  try{dashTab()}catch(e){}try{if(window.libTab)window.libTab()}catch(e){}
+  /* an associate who is set up lands on the Library, so the pieces come before the people */
+  if(agent.link&&st.contacts.length){var t=$("tabnav");if(t)t.style.display="flex";showTab(window.renderLib?"lib":"outreach")}
   checkVersion()}
 
  /* ---------- prefs go to the agent row, not Airtable ---------- */
@@ -1393,6 +1402,215 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
    sb.auth.onAuthStateChange(function(ev,session){if(session&&session.user&&!user){if(location.hash&&/access_token|type=/.test(location.hash))history.replaceState(null,"",location.pathname+location.search);enter(session.user)}});
    sb.auth.getSession().then(function(r){if(r.data&&r.data.session&&r.data.session.user)enter(r.data.session.user)})})}
  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",boot);else boot();
+})();
+
+/* Library tab for the Outreach Studio. Injected after kit-overrides.js and cloud.js.
+   Every approved piece in one place, previewed the way the recipient sees it, before the associate
+   picks anybody. It reads the same KIT data the send panel uses, renders through the same functions,
+   and never rewords anything. Built 2026-09-22. */
+(function(){
+ if(!window.KIT)return;
+ var $=function(id){return document.getElementById(id)};
+ var FKIT="lib_f_kit",FCH="lib_f_ch";
+ var SAMPLE={first:"Sam",last:"Sample",email:"",phone:"",rel:"",social:[],notes:""};
+ var fKit="all",fCh="all",filled=true,cur=null;
+ try{fKit=localStorage.getItem(FKIT)||"all";fCh=localStorage.getItem(FCH)||"all"}catch(e){}
+
+ /* ---------- what the library holds, read from the approved kit ---------- */
+ var CHAN={email:"Email",text:"Text",facebook:"Facebook",instagram:"Instagram"};
+ function expDate(exp){var m=String(exp||"").match(/(\d{1,2})\/(\d{1,2})/);if(!m)return null;
+  var y=new Date().getFullYear(),d=new Date(y,+m[1]-1,+m[2],23,59,59);
+  /* the stamped pieces expire 9/27/2026; if that date has long passed treat it as this year's */
+  return d}
+ function expLabel(exp){var d=expDate(exp);if(!d)return "";
+  return d.toLocaleDateString(undefined,{month:"short",day:"numeric"})}
+ function isExpired(exp){var d=expDate(exp);return !!(d&&Date.now()>d.getTime())}
+ function statusOf(z,exp){if(!z)return "pending";return isExpired(exp)?"expired":"approved"}
+ function pieces(){var out=[];
+  ["intro","life_moment","nudge"].forEach(function(k){var e=window.KIT.emails[k];if(!e)return;
+   out.push({id:"general-email-"+k,kit:"general",channel:"email",key:k,title:e.subject,name:window.LIBNAMES[k]||e.subject,z:e.z,exp:e.exp,status:statusOf(e.z,e.exp),excerpt:e.body})});
+  if(window.KIT.texts)["intro","life_moment","nudge"].forEach(function(k){var t=window.KIT.texts[k];if(!t)return;
+   out.push({id:"general-text-"+k,kit:"general",channel:"text",key:k,title:window.LIBNAMES[k]||k,z:t.z,exp:t.exp,status:statusOf(t.z,t.exp),excerpt:t.body})});
+  if(window.KIT.cancer_texts)["why_cancer","life_moment","nudge"].forEach(function(k){var t=window.KIT.cancer_texts[k];if(!t)return;
+   out.push({id:"cancer-text-"+k,kit:"cancer",channel:"text",key:k,cancer:true,title:window.LIBNAMES[k]||k,z:t.z,exp:t.exp,status:statusOf(t.z,t.exp),excerpt:t.body})});
+  [["general","facebook"],["general","instagram"],["cancer","facebook"],["cancer","instagram"]].forEach(function(x){
+   var cp=window.KIT.captions[x[0]]&&window.KIT.captions[x[0]][x[1]];if(!cp)return;
+   out.push({id:x[0]+"-"+x[1],kit:x[0],channel:x[1],key:x[1],cap:cp,img:window.KIT.images[x[0]+"_"+x[1]],
+    title:CHAN[x[1]]+" post",z:cp.z||"",exp:cp.exp,status:statusOf(cp.z,cp.exp),excerpt:cp.lines.join(" ")})});
+  return out}
+
+ /* ---------- rendering ---------- */
+ function badge(p){
+  if(p.status==="approved")return '<span class="lbadge ok">Approved</span>';
+  if(p.status==="expired")return '<span class="lbadge no">Expired</span>';
+  return '<span class="lbadge wait">Awaiting Compliance number</span>'}
+ function meta(p){var bits=[p.kit==="cancer"?"Cancer kit":"General kit",CHAN[p.channel]];
+  if(p.status==="approved"&&p.z)bits.push(p.z+", expires "+expLabel(p.exp));
+  return bits.join(" · ")}
+ function style(){if($("lib_css"))return;var s=document.createElement("style");s.id="lib_css";
+  s.textContent="#tabLib .lstrip{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:13px;color:var(--muted);margin:0 0 14px}"
+  +"#tabLib .lchips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}"
+  +"#tabLib .lchip{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 13px;font:inherit;font-size:13px;font-weight:600;color:var(--ink2);cursor:pointer}"
+  +"#tabLib .lchip.on{background:#0070A9;border-color:#0070A9;color:#fff}"
+  +"#tabLib .lgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}"
+  +"#tabLib .lcard{display:flex;gap:12px;text-align:left;width:100%;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px;cursor:pointer;font:inherit}"
+  +"#tabLib .lcard:hover{border-color:#bfe6f5}"
+  +"#tabLib .lthumb{flex:0 0 54px;height:54px;border-radius:10px;background:#EAF7FC;display:flex;align-items:center;justify-content:center;overflow:hidden}"
+  +"#tabLib .lthumb img{width:100%;height:100%;object-fit:cover}"
+  +"#tabLib .ltitle{display:block;font-weight:700;font-size:15px}"
+  +"#tabLib .lmeta{display:block;font-size:12px;color:var(--muted);margin-top:2px}"
+  +"#tabLib .lex{font-size:13px;color:var(--ink2);margin-top:6px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}"
+  +".lbadge{display:inline-block;margin-top:6px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}"
+  +".lbadge.ok{background:#E8F6EC;color:#166534}.lbadge.no{background:#FDECEC;color:#B3261E}.lbadge.wait{background:#FFF4E5;color:#9A5B00}"
+  +"#libprev{position:fixed;inset:0;z-index:70;background:rgba(11,18,32,.5);display:none}"
+  +"#libprev.on{display:block}"
+  +"#libprev .lpan{position:absolute;inset:0;background:var(--bg);overflow-y:auto}"
+  +"@media(min-width:720px){#libprev .lpan{inset:24px;max-width:760px;margin:0 auto;border-radius:16px}}"
+  +"#libprev .lhead{position:sticky;top:0;background:#fff;border-bottom:1px solid var(--line);padding:14px 16px;display:flex;gap:10px;align-items:center;z-index:2}"
+  +"#libprev .lbody{padding:16px}"
+  +"#libprev .frame{background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden;margin-bottom:14px}"
+  +"#libprev .fhead{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}"
+  +"#libprev .fav{width:34px;height:34px;border-radius:50%;background:#0070A9;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}"
+  +"#libprev .fcap{padding:12px 14px;white-space:pre-wrap;font-size:14px;line-height:1.5}"
+  +"#libprev .fimg{width:100%;display:block}"
+  +"#libprev .bubble{background:#EAF7FC;border-radius:16px;padding:12px 14px;white-space:pre-wrap;font-size:14px;line-height:1.5}"
+  +"#libprev .facts{font-size:13px;color:var(--ink2);background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px}"
+  +"#libprev .facts b{display:block;margin-bottom:4px}"
+  +"#libprev .acts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}"
+  +"#libprev .why{font-size:13px;color:#9A5B00;background:#FFF4E5;border-radius:10px;padding:10px 12px;margin-bottom:14px}"
+  +"#libpick .pk{width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:8px;font:inherit;cursor:pointer}"
+  +"#libpick .pk b{display:block}#libpick .pk span{font-size:12.5px;color:var(--muted)}";
+  document.head.appendChild(s)}
+
+ function statusStrip(list){
+  var ok=list.filter(function(p){return p.status==="approved"}),exp=ok[0]?expLabel(ok[0].exp):"";
+  return '<div class="lstrip"><span><b>'+ok.length+'</b> approved pieces'+(exp?', expire '+esc(exp):"")+'</span>'
+   +'<button class="lchip" type="button" onclick="libHelp()">How to use these</button></div>'}
+ function chips(){
+  var k=[["all","All"],["general","General"],["cancer","Cancer"]],c=[["all","All"],["email","Email"],["text","Text"],["facebook","Facebook"],["instagram","Instagram"]];
+  return '<div class="lchips">'+k.map(function(x){return '<button class="lchip'+(fKit===x[0]?" on":"")+'" type="button" onclick="libFilter(&#39;kit&#39;,&#39;'+x[0]+'&#39;)">'+x[1]+'</button>'}).join("")+'</div>'
+   +'<div class="lchips">'+c.map(function(x){return '<button class="lchip'+(fCh===x[0]?" on":"")+'" type="button" onclick="libFilter(&#39;ch&#39;,&#39;'+x[0]+'&#39;)">'+x[1]+'</button>'}).join("")+'</div>'}
+ window.libFilter=function(which,v){if(which==="kit"){fKit=v;try{localStorage.setItem(FKIT,v)}catch(e){}}
+  else{fCh=v;try{localStorage.setItem(FCH,v)}catch(e){}}renderLib()};
+ function shown(list){return list.filter(function(p){
+  return (fKit==="all"||p.kit===fKit)&&(fCh==="all"||p.channel===fCh)})}
+ function thumb(p){if(p.img)return '<span class="lthumb"><img src="'+esc(p.img)+'" alt=""></span>';
+  var t=p.channel==="email"?"Email":"Text";
+  return '<span class="lthumb" style="font-weight:700;color:#0070A9;font-size:12px">'+t+'</span>'}
+ function card(p){return '<button class="lcard" type="button" onclick="libOpen(&#39;'+p.id+'&#39;)">'+thumb(p)
+  +'<span style="flex:1;min-width:0"><span class="ltitle">'+esc(p.name||p.title)+'</span>'
+  +'<span class="lmeta">'+esc(meta(p))+'</span>'
+  +'<span class="lex">'+esc(String(p.excerpt||"").slice(0,150))+'</span><br>'+badge(p)+'</span></button>'}
+ window.renderLib=function(){style();var el=$("tabLib");if(!el)return;
+  var all=pieces(),list=shown(all);
+  el.innerHTML='<div class="wrap" style="padding-top:18px"><h2 class="t" style="margin:0 0 4px">Library</h2>'
+   +'<p class="lead" style="margin:0 0 14px">Every approved piece. Look before you pick anyone.</p>'
+   +statusStrip(all)+chips()
+   +(list.length?'<div class="lgrid">'+list.map(card).join("")+'</div>'
+     :'<p class="lead">Nothing matches those filters.</p>')
+   +'</div>'};
+
+ /* ---------- preview ---------- */
+ function who(){return filled?SAMPLE:{first:"[First name]"}}
+ function previewBody(p){
+  if(p.channel==="email"){var e=window.KIT.emails[p.key];
+   return '<div class="frame"><div class="fcap" style="border-bottom:1px solid var(--line);font-weight:700">Subject: '+esc(e.subject)+'</div>'
+    +'<div class="emlprev">'+window.LIBEMAIL(e,who())+'</div></div>'}
+  if(p.channel==="text"){var t=p.cancer?window.KIT.cancer_texts[p.key]:window.KIT.texts[p.key];
+   return '<div class="frame"><div style="padding:14px"><div class="bubble">'+esc(window.LIBSMS(t,who()))+'</div></div></div>'}
+  var cap=window.LIBCAP(p.cap,who());
+  return '<div class="frame"><div class="fhead"><span class="fav">'+esc((window.AGENT&&window.AGENT()||"You").slice(0,2).toUpperCase())+'</span>'
+   +'<span><b>'+esc(window.AGENT&&window.AGENT()||"Your name")+'</b><br><span style="font-size:12px;color:var(--muted)">'+esc(CHAN[p.channel])+'</span></span></div>'
+   +(p.img?'<img class="fimg" src="'+esc(p.img)+'" alt="">':"")
+   +'<div class="fcap">'+esc(cap)+'</div></div>'}
+ function actions(p){
+  if(p.status!=="approved"){
+   return '<div class="why">'+(p.status==="expired"
+    ?"This piece expired. It cannot be sent until Compliance issues a new version."
+    :"This piece is waiting on its Compliance number. You can look at it, but it cannot be sent yet.")+'</div>'}
+  var b='<div class="acts"><button class="btn sm" type="button" onclick="libSend()">Send to a contact</button>'
+   +'<button class="btn ghost sm" type="button" onclick="libCopy()">Copy</button>';
+  if(p.img)b+='<button class="btn ghost sm" type="button" onclick="libShare()">Share post</button>'
+   +'<button class="btn ghost sm" type="button" onclick="libSave()">Save image</button>';
+  return b+'</div>'}
+ window.libOpen=function(id){var p=pieces().filter(function(x){return x.id===id})[0];if(!p)return;cur=p;
+  style();var d=$("libprev");
+  if(!d){d=document.createElement("div");d.id="libprev";d.innerHTML='<div class="lpan"><div class="lhead">'
+   +'<button class="btn ghost sm" type="button" onclick="libClose()">Back</button>'
+   +'<span id="lp_title" style="font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span></div>'
+   +'<div class="lbody" id="lp_body"></div></div>';
+   document.body.appendChild(d);
+   d.addEventListener("click",function(e){if(e.target===d)libClose()});
+   document.addEventListener("keydown",function(e){if(e.key==="Escape"&&d.classList.contains("on"))libClose()})}
+  $("lp_title").textContent=p.name||p.title;
+  $("lp_body").innerHTML='<div style="margin-bottom:10px">'+badge(p)+' <span style="font-size:12.5px;color:var(--muted)">'+esc(meta(p))+'</span></div>'
+   +'<button class="lchip'+(filled?" on":"")+'" type="button" id="lp_toggle" onclick="libToggle()">'+(filled?"Showing a filled in sample":"Showing placeholders")+'</button>'
+   +'<div style="height:10px"></div>'
+   +previewBody(p)
+   +'<div class="facts"><b>What gets filled in</b>The contact first name, your name, your business mailing address, and your unique link. Nothing else on the piece changes.</div>'
+   +actions(p);
+  d.classList.add("on");
+  if(window.emlFitAll)setTimeout(window.emlFitAll,40)};
+ window.libClose=function(){var d=$("libprev");if(d)d.classList.remove("on")};
+ window.libToggle=function(){filled=!filled;libOpen(cur.id)};
+
+ /* ---------- actions ---------- */
+ function currentText(){var p=cur;
+  if(p.channel==="email")return window.LIBEMAILTEXT(window.KIT.emails[p.key],who());
+  if(p.channel==="text")return window.LIBSMS(p.cancer?window.KIT.cancer_texts[p.key]:window.KIT.texts[p.key],who());
+  return window.LIBCAP(p.cap,who())}
+ window.libCopy=function(){window.__copy(currentText());toast("Copied")};
+ window.libShare=function(){var S=window.SocialShare,name=(cur.img||"post.png").split("/").pop();
+  if(!S){window.__copy(currentText());toast("Caption copied. Open Instagram or Facebook and paste it.");return}
+  S.post(cur.img,currentText(),name).then(function(r){if(r!=="shared"){window.__copy(currentText());toast("Caption copied. Open Instagram or Facebook and paste it.")}})};
+ window.libSave=function(){var S=window.SocialShare,name=(cur.img||"post.png").split("/").pop();
+  if(!S){toast("Press and hold the picture to save it.");return}
+  S.saveImage(cur.img,name).then(function(r){toast(r==="none"?"Could not save the image. Try Share post instead.":"Pick Save Image to keep it on your phone.")})};
+
+ /* pick a contact, then hand off to the send panel that already exists */
+ window.libSend=function(){var d=$("libpick");
+  if(!st.contacts.length){toast("Add a contact first, on the Outreach tab.");return}
+  style();
+  if(!d){d=document.createElement("div");d.id="libpick";d.className="drawer";
+   d.innerHTML='<div class="dpan" style="background:var(--bg)"><div class="dhead">'
+    +'<span style="font-weight:700;flex:1">Send to</span>'
+    +'<button class="btn ghost sm" type="button" onclick="libPickClose()">Close</button></div>'
+    +'<div style="padding:16px" id="lp_list"></div></div>';
+   document.body.appendChild(d);
+   d.addEventListener("click",function(e){if(e.target===d)libPickClose()})}
+  $("lp_list").innerHTML=st.contacts.map(function(c,i){
+   var sub=[c.rel,c.email||c.phone].filter(Boolean).join(" · ");
+   return '<button class="pk" type="button" onclick="libPicked('+i+')"><b>'+esc((c.first||"")+" "+(c.last||""))+'</b><span>'+esc(sub)+'</span></button>'}).join("");
+  d.classList.add("on")};
+ window.libPickClose=function(){var d=$("libpick");if(d)d.classList.remove("on")};
+ window.libPicked=function(i){var ch=cur.channel==="email"?"Email":(cur.channel==="text"?"Text":"Social");
+  libPickClose();libClose();
+  try{openDrawer(i)}catch(e){}
+  setTimeout(function(){try{
+   var btns=document.querySelectorAll("#chtab button");
+   for(var x=0;x<btns.length;x++){if(btns[x].textContent.indexOf(ch)===0){showCh(ch,btns[x]);break}}
+   var more=document.getElementById("more_"+ch);if(more&&more.hidden)window.kitMore(ch)
+  }catch(e){}},420)};
+
+ window.libHelp=function(){if(window.sendHelp)window.sendHelp();else toast("Pick a piece to see how it looks.")};
+
+ /* ---------- the tab ---------- */
+ function tab(){if($("tabLib"))return;
+  var nav=$("tabnav");if(!nav)return;
+  var b=document.createElement("button");b.className="tb";b.setAttribute("data-t","lib");b.textContent="Library";
+  b.onclick=function(){showTab("lib")};
+  nav.insertBefore(b,nav.firstChild);
+  var d=document.createElement("div");d.className="wrap";d.id="tabLib";d.style.display="none";
+  var host=$("tabShare");if(host&&host.parentNode)host.parentNode.insertBefore(d,host);else document.body.appendChild(d)}
+ var showTab0=window.showTab;
+ window.showTab=function(t){tab();
+  if(t!=="lib"){var d=$("tabLib");if(d)d.style.display="none";return showTab0(t)}
+  showTab0("account");
+  $("tabAccount").style.display="none";
+  var dd=$("tabLib");if(dd)dd.style.display="block";
+  var nav=$("tabnav");if(nav)Array.prototype.forEach.call(nav.querySelectorAll(".tb"),function(x){x.classList.toggle("on",x.getAttribute("data-t")==="lib")});
+  window.scrollTo(0,0);renderLib()};
+ window.libTab=tab;
 })();
 
 </script></body></html>

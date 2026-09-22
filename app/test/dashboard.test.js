@@ -78,7 +78,7 @@ const tick = (ms) => new Promise(r => setTimeout(r, ms || 60));
   check('group email is named in plain words', /Group email/.test(txt) && !/Email bulk/.test(txt));
   check('channels are broken out', /By channel/.test(txt) && /Text/.test(txt) && /Social/.test(txt));
   check('pieces are broken out by name', /By piece/.test(txt) && /Some news/.test(txt));
-  const bars = [...t.doc.querySelectorAll('#tabDash .brow')].map(b => b.querySelector('.lbl').textContent + '=' + b.querySelector('.n').textContent);
+  const bars = [...t.doc.querySelectorAll('#tabDash .dbrow')].map(b => b.querySelector('.dlbl').textContent + '=' + b.querySelector('.dnum').textContent);
   check('the counts per channel are right', bars.indexOf('Group email=2') >= 0 && bars.indexOf('Email=1') >= 0 && bars.indexOf('Text=1') >= 0, bars.join(','));
   check('the thirty day chart has a bar per day', t.doc.querySelectorAll('#tabDash .days')[0].children.length === 30);
   check('it says plainly that a piece is not a confirmed send', /cannot see whether you pressed send/.test(txt));

@@ -498,13 +498,39 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
     .catch(function(){if(gaveUp||!scan.stream)return;gaveUp=true;if(scan.timer){clearInterval(scan.timer);scan.timer=null}scanMsg("Looking for a QR code");scanJsQR(v)})},350);return}
    scanJsQR(v)
   }).catch(function(){scanMsg("Camera permission was not granted. Allow the camera, or scan the QR code with your phone camera app and paste the link.")})};
+ /* 2: Share and QR holds the one editable copy of the link and the mailing address. Everywhere else
+    shows them read only with a link back to that screen, so an associate is never editing two fields
+    that hold the same value. */
+ function roRow(label,value,empty){return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#fafcfe">'
+  +'<div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:4px">'+esc(label)+'</div>'
+  +'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+  +'<div style="flex:1;min-width:160px;word-break:break-all;'+(value?"":"color:var(--muted)")+'">'+esc(value||empty)+'</div>'
+  +'<button class="btn ghost sm" type="button" onclick="kitEditDetails()">Edit</button></div>'
+  +'<div class="help" style="margin-top:6px">Saved once in Share and QR and used on every piece.</div></div>'}
+ window.kitEditDetails=function(){try{closeDrawer()}catch(e){}showTab("share");
+  setTimeout(function(){var el=$("kit_link");if(el&&el.scrollIntoView)el.scrollIntoView({block:"center"})},120)};
+ function detailsRO(){return roRow("YOUR UNIQUE LINK",hasLink()?linkLabel():"","No link saved yet")
+  +roRow("YOUR BUSINESS MAILING ADDRESS",addr(),"No address saved yet")}
  function addrBox(){var a=addr();return '<div style="border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;background:#fafcfe"><div style="font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px">YOUR BUSINESS MAILING ADDRESS (required in the email footer)</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="kit_addr" value="'+esc(a)+'" placeholder="Street, City, ST ZIP" style="flex:1;min-width:220px;height:36px;border:1px solid var(--line);border-radius:8px;padding:0 10px;font:inherit"><button class="btn sm" style="height:36px" onclick="kitSetAddr(document.getElementById(&#39;kit_addr&#39;).value)">Save</button></div></div>'}
 
+ /* 3: show the suggested piece for the channel, and keep the rest one tap away. Every piece is still
+    rendered and still in RENDERED, so the send buttons and their indexes do not change. */
+ var MORE={Email:"email",Text:"text",Social:"post"};
+ function foldCards(ch,cards){if(cards.length<2)return cards.join("");
+  var n=cards.length-1,word=MORE[ch]||"piece";
+  return cards[0]
+   +'<div id="more_'+ch+'" hidden>'+cards.slice(1).join("")+'</div>'
+   +'<button class="btn ghost sm morebtn" type="button" id="morebtn_'+ch+'" onclick="kitMore(&#39;'+ch+'&#39;)">Show '+n+' more '+word+(n===1?"":"s")+'</button>'}
+ window.kitMore=function(ch){var box=$("more_"+ch),b=$("morebtn_"+ch);if(!box||!b)return;
+  var open=box.hidden;box.hidden=!open;
+  var n=box.children.length,word=MORE[ch]||"piece";
+  b.textContent=open?"Show fewer":"Show "+n+" more "+word+(n===1?"":"s");
+  if(open)setTimeout(emlFit,30)};
  function renderKit(ch,c,sg){RENDERED[ch]=[];var out='<div class="designs">';
   if(ch==="Email"){var SP=window.Suppression;if(c&&(c.unsubscribed_at||(SP&&SP.blocked(c)))){return out+'<div class="card2" style="padding:16px"><b>'+esc(c.first||"This contact")+' unsubscribed from email.</b> Text and social pieces are still available.</div></div>'}
-   if(c&&SP&&SP.pending(c)){SP.check([c]).then(function(){try{if(st.contacts[st.cur]===c)genForContact()}catch(e){}});return out+'<div class="card2" style="padding:16px">Checking this address</div></div>'}ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});out+=card(NAMES[k]+" ("+e.z+")",'<div class="emlprev">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0)})}
-  else if(ch==="Text"){var list=ordered(sg.text).map(function(k){return{k:k,t:KIT.texts[k],lab:NAMES[k]}}).concat(["why_cancer","life_moment","nudge"].map(function(k){return{k:k,t:KIT.cancer_texts[k],lab:"Cancer kit: "+NAMES[k]}}));list.forEach(function(x,i){var body=smsText(x.t,c);RENDERED[ch].push({subject:x.lab,body:body,url:link(),tel:c.phone||""});out+=card(x.lab+" ("+x.t.z+")",'<div style="padding:6px 0">'+smsHTML(body,c)+'</div>',shareRow(ch,i),i===0)})}
-  else{var caps=[["general","facebook","Facebook post"],["general","instagram","Instagram post"],["cancer","facebook","Cancer kit: Facebook post"],["cancer","instagram","Cancer kit: Instagram post"]];caps.forEach(function(x,i){var cp=KIT.captions[x[0]][x[1]],img=KIT.images[x[0]+"_"+x[1]],body=capText(cp);RENDERED[ch].push({subject:x[2],body:body,url:link(),img:img});out+=card(x[2]+(cp.z?" ("+cp.z+")":" (form number pending)"),'<div style="padding:12px 14px"><img src="'+img+'" alt="" style="width:100%;max-width:360px;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:10px" onerror="this.style.display=&#39;none&#39;"><pre style="white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.5;margin:0;color:#1D1D1F">'+esc(body)+'</pre></div>',shareRow(ch,i),false)})}
+   if(c&&SP&&SP.pending(c)){SP.check([c]).then(function(){try{if(st.contacts[st.cur]===c)genForContact()}catch(e){}});return out+'<div class="card2" style="padding:16px">Checking this address</div></div>'}var ec=[];ordered(sg.email).forEach(function(k,i){var e=KIT.emails[k];RENDERED[ch].push({subject:e.subject,body:emailText(e,c),url:link(),html:emailDoc(e,c),to:c.email||""});ec.push(card(NAMES[k]+" ("+e.z+")",'<div class="emlprev">'+emailHTMLKit(e,c)+'</div>',shareRow(ch,i),i===0))});out+=foldCards(ch,ec)}
+  else if(ch==="Text"){var list=ordered(sg.text).map(function(k){return{k:k,t:KIT.texts[k],lab:NAMES[k]}}).concat(["why_cancer","life_moment","nudge"].map(function(k){return{k:k,t:KIT.cancer_texts[k],lab:"Cancer kit: "+NAMES[k]}}));var tc=[];list.forEach(function(x,i){var body=smsText(x.t,c);RENDERED[ch].push({subject:x.lab,body:body,url:link(),tel:c.phone||""});tc.push(card(x.lab+" ("+x.t.z+")",'<div style="padding:6px 0">'+smsHTML(body,c)+'</div>',shareRow(ch,i),i===0))});out+=foldCards(ch,tc)}
+  else{var caps=[["general","facebook","Facebook post"],["general","instagram","Instagram post"],["cancer","facebook","Cancer kit: Facebook post"],["cancer","instagram","Cancer kit: Instagram post"]];var sc=[];caps.forEach(function(x,i){var cp=KIT.captions[x[0]][x[1]],img=KIT.images[x[0]+"_"+x[1]],body=capText(cp);RENDERED[ch].push({subject:x[2],body:body,url:link(),img:img});sc.push(card(x[2]+(cp.z?" ("+cp.z+")":" (form number pending)"),'<div style="padding:12px 14px"><img src="'+img+'" alt="" style="width:100%;max-width:360px;border-radius:10px;border:1px solid var(--line);display:block;margin-bottom:10px" onerror="this.style.display=&#39;none&#39;"><pre style="white-space:pre-wrap;font:inherit;font-size:14px;line-height:1.5;margin:0;color:#1D1D1F">'+esc(body)+'</pre></div>',shareRow(ch,i),false))});out+=foldCards(ch,sc)}
   return out+'</div>'}
 
  window.shareRow=function(ch,i){var b='<div style="display:flex;gap:7px;flex-wrap:wrap;padding:11px 13px;border-top:1px solid var(--line);background:#fafcfe"><span style="font-size:11px;font-weight:700;color:var(--muted);width:100%;margin-bottom:2px">SEND VIA</span>';
@@ -533,7 +559,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
 
  window.genForContact=function(){var sel=[].slice.call(document.querySelectorAll("#d_chans .ck2.on")).map(function(b){return b.dataset.ch});if(!sel.length){toast("Pick at least one channel");return}var c=st.contacts[st.cur];var sg=suggest(c);
   var counts={Email:3,Text:6,Social:4};
-  var h=linkBox()+addrBox()+'<div class="chtab" id="chtab">'+sel.map(function(ch,i){return '<button class="'+(i===0?"on":"")+'" onclick="showCh(&#39;'+ch+'&#39;,this)">'+ch+' · '+counts[ch]+'</button>'}).join("")+'</div>';
+  var h=detailsRO()+'<div class="chtab" id="chtab">'+sel.map(function(ch,i){return '<button class="'+(i===0?"on":"")+'" onclick="showCh(&#39;'+ch+'&#39;,this)">'+ch+' · '+counts[ch]+'</button>'}).join("")+'</div>';
   sel.forEach(function(ch,i){h+='<div class="chpane" data-ch="'+ch+'" style="display:'+(i===0?"block":"none")+'">'+renderKit(ch,c,sg)+'</div>'});
   $("d_out").innerHTML=h;var btn=$("d_gen");btn.disabled=false;btn.textContent="Refresh";
   uiStyle();setTimeout(emlFit,30);sendHelp()};
@@ -554,7 +580,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  var gs0=goStep;
  window.goStep=function(n){gs0(n);if(n===3){var box=$("st3link");if(box)box.innerHTML=linkBox().replace('margin-bottom:14px','margin-bottom:0')}};
  var rs0=renderShareTab;
- window.renderShareTab=function(){rs0();var h=$("tabShare").querySelector(".hero");if(h)h.insertAdjacentHTML("afterend",linkBox())};
+ window.renderShareTab=function(){rs0();var h=$("tabShare").querySelector(".hero");if(h)h.insertAdjacentHTML("afterend",linkBox()+addrBox())};
  var lp0=loadPrefsRemote;
  window.loadPrefsRemote=async function(){await lp0();try{var r=await fetch(API+"?proxy=getPrefs&slug="+encodeURIComponent(st.url||"chris"));var j=await r.json();if(j&&j.prefs){if(j.prefs.link&&!hasLink())localStorage.setItem(LINK_KEY,j.prefs.link);if(j.prefs.addr&&!addr())localStorage.setItem(ADDR_KEY,j.prefs.addr)}}catch(e){}};
 
@@ -646,6 +672,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  var rcoi0=window.renderCOI;
  window.renderCOI=function(){rcoi0();coiStyle();coiBar();
   var lead=document.querySelector("#st4 .lead");if(lead)lead.textContent="Click or tap anyone to send them approved outreach by email, text or post. Check the box next to a name to pick people for a group email.";
+  coiIntro();
   var live={};st.contacts.forEach(function(c){if(!selBlocked(c))live[ckey(c)]=1});Object.keys(sel).forEach(function(k){if(!live[k])delete sel[k]});
   coiCards().forEach(function(d,i){var c=st.contacts[i];if(!c)return;
    d.setAttribute("data-i",i);d.ondblclick=null;d.onclick=function(){openDrawer(i)};
@@ -661,6 +688,18 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
    var help=d.querySelector(".help");if(help&&/double click/i.test(help.textContent))help.textContent="Click or tap to send"});
   coiFilter();
   var SP=window.Suppression;if(SP){var pend=st.contacts.filter(function(c){return SP.pending(c)});if(pend.length)SP.check(pend).then(function(){window.renderCOI()})}};
+ /* 4: after the first visit the heading, the picture and the instructions fold away, so the contact
+    list is near the top of the screen. "What is this" brings them back for that session. */
+ var COI_SEEN="kit_seen_coi";
+ function coiIntro(){var hero=document.querySelector("#st4 .hero");if(!hero||hero.dataset.folded)return;
+  hero.dataset.folded="1";
+  var seen=false;try{seen=localStorage.getItem(COI_SEEN)==="1"}catch(e){}
+  if(!seen){try{localStorage.setItem(COI_SEEN,"1")}catch(e){}return}
+  hero.style.display="none";
+  if($("coiabout"))return;
+  var b=document.createElement("button");b.id="coiabout";b.type="button";b.textContent="What is this";
+  b.onclick=function(){var open=hero.style.display==="none";hero.style.display=open?"":"none";b.textContent=open?"Hide":"What is this"};
+  hero.parentNode.insertBefore(b,hero)}
  window.BulkSel={cap:SEL_CAP,
   target:function(act){var list=window.BulkSel.contacts();
    return bulkTarget(act,(window.cloudAgentEmail&&window.cloudAgentEmail())||"",
@@ -706,7 +745,17 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   +".pcard .coick{margin:-6px 2px -6px -2px}"
   +".steps{padding-right:22px}"
   +"#d_notes,#d_notes+.help,label[for=d_notes]{display:none}"
-  +"#d_gen{display:none}";
+  +"#d_gen{display:none}"
+  /* 1: all four tabs visible on a phone, two rows, so nothing hides off the edge */
+  +"@media(max-width:560px){.tabs{flex-wrap:wrap;row-gap:0;padding:0 8px}"
+  +".tabs .tb{flex:1 1 calc(50% - 4px);justify-content:center;text-align:center}}"
+  /* 6: the panel used to fade in from half opacity, so its text sat on top of the list behind it */
+  +"@keyframes kitsl{from{transform:translateX(36px)}to{transform:none}}"
+  +".drawer .dpan{animation:kitsl .22s ease;opacity:1}"
+  /* 4: the standing instructions collapse after the first visit */
+  +"#coiabout{background:none;border:0;padding:4px 0;color:#0070A9;font-weight:600;font-size:13px;cursor:pointer}"
+  /* 3: the rest of the approved pieces sit behind one tap */
+  +".morebtn{margin:2px 0 14px}";
   document.head.appendChild(s)}
 
  /* Label the contact cells so the phone layout can show what each line is. */
@@ -1178,11 +1227,11 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   +"#tabDash .dtile .k{font-size:12.5px;color:var(--muted);margin-top:4px}"
   +"#tabDash .dcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px 18px;margin:0 0 18px}"
   +"#tabDash h3{margin:0 0 12px;font-family:Sora,sans-serif;font-size:16px}"
-  +"#tabDash .brow{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:13.5px}"
-  +"#tabDash .brow .lbl{flex:0 0 40%;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
-  +"#tabDash .brow .bar{flex:1;height:10px;background:#eef3f8;border-radius:6px;overflow:hidden}"
-  +"#tabDash .brow .bar span{display:block;height:100%;background:#0070A9;border-radius:6px}"
-  +"#tabDash .brow .n{flex:0 0 auto;font-weight:700;font-variant-numeric:tabular-nums}"
+  +"#tabDash .dbrow{display:flex;align-items:center;gap:10px;margin:0 0 8px;font-size:13.5px}"
+  +"#tabDash .dbrow .dlbl{flex:0 0 33%;color:var(--ink2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+  +"#tabDash .dbrow .dbar{flex:1 1 auto;min-width:90px;height:12px;padding:0;background:#eef3f8;border-radius:6px;overflow:hidden}"
+  +"#tabDash .dbrow .dbar span{display:block;height:100%;min-width:6px;background:#0070A9;border-radius:6px}"
+  +"#tabDash .dbrow .dnum{flex:0 0 auto;font-weight:700;font-variant-numeric:tabular-nums}"
   +"#tabDash .days{display:flex;align-items:flex-end;gap:3px;height:70px;margin-top:6px}"
   +"#tabDash .days i{flex:1;background:#0070A9;border-radius:3px 3px 0 0;min-height:2px;opacity:.85}"
   +"#tabDash .dnote{font-size:12.5px;color:var(--muted);line-height:1.5}"
@@ -1194,9 +1243,11 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   document.head.appendChild(s)}
  function bars(rows,total){if(!rows.length)return '<div class="empty">Nothing yet.</div>';
   var max=Math.max.apply(null,rows.map(function(r){return r[1]}))||1;
-  return rows.map(function(r){return '<div class="brow"><span class="lbl" title="'+esc(r[0])+'">'+esc(r[0])+'</span>'
-   +'<span class="bar"><span style="width:'+Math.round(r[1]/max*100)+'%"></span></span>'
-   +'<span class="n">'+dnum(r[1])+'</span></div>'}).join("")}
+  /* widths are a share of the largest value in the set, so 3 against 17 reads as about a fifth */
+  return rows.map(function(r){var pct=Math.max(2,Math.round(r[1]/max*100));
+   return '<div class="dbrow"><span class="dlbl" title="'+esc(r[0])+'">'+esc(r[0])+'</span>'
+   +'<span class="dbar"><span style="width:'+pct+'%" title="'+dnum(r[1])+'"></span></span>'
+   +'<span class="dnum">'+dnum(r[1])+'</span></div>'}).join("")}
  function dayChart(rows,days){var end=new Date(),keys=[],counts={};
   for(var i=days-1;i>=0;i--){var d=new Date(end.getTime()-i*86400000);keys.push(dayKey(d));counts[dayKey(d)]=0}
   rows.forEach(function(r){var k=dayKey(r);if(k in counts)counts[k]++});

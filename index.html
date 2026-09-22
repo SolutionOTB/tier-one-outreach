@@ -536,7 +536,7 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  window.shareRow=function(ch,i){var b='<div style="display:flex;gap:7px;flex-wrap:wrap;padding:11px 13px;border-top:1px solid var(--line);background:#fafcfe"><span style="font-size:11px;font-weight:700;color:var(--muted);width:100%;margin-bottom:2px">SEND VIA</span>';
   if(ch==="Email")b+=sbtn("Copy formatted email",ch,"html",i)+sbtn("Gmail",ch,"gmail",i)+sbtn("Outlook",ch,"outlook",i)+sbtn("Copy text",ch,"copy",i);
   else if(ch==="Text")b+=sbtn("Send as text",ch,"sms",i)+sbtn("Copy",ch,"copy",i);
-  else b+=sbtn("Instagram",ch,"ig",i)+sbtn("Facebook",ch,"fb",i)+sbtn("Copy caption",ch,"copy",i)+sbtn("Download image",ch,"img",i);
+  else b+=sbtn("Share post",ch,"share",i)+sbtn("Copy caption",ch,"copy",i)+sbtn("Save image",ch,"img",i)+sbtn("Instagram",ch,"ig",i)+sbtn("Facebook",ch,"fb",i);
   return b+'</div>'};
  function isIOS(){return /iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Macintosh/.test(navigator.userAgent))}
  function isMobile(){return isIOS()||/Android/i.test(navigator.userAgent)}
@@ -554,9 +554,25 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   if(act==="outlook"){openMail("outlook",d.to,d.subject,d.body);return}
   if(act==="sms"){location.href=smsTo(d.tel,d.body);return}
   if(act==="html"){try{navigator.clipboard.write([new ClipboardItem({"text/html":new Blob([d.html],{type:"text/html"}),"text/plain":new Blob([d.body],{type:"text/plain"})})]).then(function(){toast("Formatted email copied. Paste into a new Gmail or Outlook message.")},function(){window.__copy(d.body)})}catch(e){window.__copy(d.body)}return}
-  if(act==="img"){if(!d.img)return;var a=document.createElement("a");a.href=d.img;a.download=d.img.split("/").pop();document.body.appendChild(a);a.click();a.remove();return}
+  if(act==="share"||act==="img"){socialSend(act,d);return}
+  if(act==="ig"||act==="fb"){socialApp(act,d);return}
   return sh0(ch,act,i)};
 
+ /* The old Download image used a link with the download attribute. A phone WebView ignores that and
+    navigates to the picture instead, which left the associate on a bare image with no way back.
+    Everything now goes through the share sheet, and the fallback never navigates this window. */
+ function socialSend(act,d){var S=window.SocialShare,name=(d.img||"post.png").split("/").pop();
+  if(!S){window.__copy(d.body);toast("Caption copied. Open Instagram or Facebook and paste it.");return}
+  if(act==="img"){S.saveImage(d.img,name).then(function(r){
+   toast(r==="none"?"Could not save the image. Try Share post instead.":"Pick Save Image to keep it on your phone.")});return}
+  S.post(d.img,d.body,name).then(function(r){
+   if(r==="shared")return;
+   window.__copy(d.body);toast("Caption copied. Open Instagram or Facebook and paste it.")})}
+ /* Instagram and Facebook still open their own app, with the caption already copied to paste. */
+ function socialApp(act,d){window.__copy(d.body);
+  var appUrl=act==="ig"?"instagram://app":"fb://feed",web=act==="ig"?"https://www.instagram.com/":"https://www.facebook.com/";
+  toast("Caption copied. Paste it into your post.");
+  if(isMobile())openApp(appUrl,web);else openL(web)}
  window.genForContact=function(){var sel=[].slice.call(document.querySelectorAll("#d_chans .ck2.on")).map(function(b){return b.dataset.ch});if(!sel.length){toast("Pick at least one channel");return}var c=st.contacts[st.cur];var sg=suggest(c);
   var counts={Email:3,Text:6,Social:4};
   var h=detailsRO()+'<div class="chtab" id="chtab">'+sel.map(function(ch,i){return '<button class="'+(i===0?"on":"")+'" onclick="showCh(&#39;'+ch+'&#39;,this)">'+ch+' · '+counts[ch]+'</button>'}).join("")+'</div>';
@@ -1186,6 +1202,50 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
    if(mailAcct!==null)return Promise.resolve(mailAcct);
    return mailC().hasAccount().then(function(r){mailAcct=!!(r&&r.hasAccount);return mailAcct},function(){mailAcct=false;return false})},
   open:function(o){var P=mailC();return P?P.open(o):Promise.reject(new Error("no mail composer"))}
+ };
+
+ /* ---------- sharing a post ---------- */
+ /* One tap hands the post image and its approved caption to the phone's share sheet, where the
+    associate picks Instagram, Facebook, Messages or Save Image and confirms the post there. Meta
+    does not allow posting to a personal profile from an app, so the share sheet is the way. */
+ function b64(buf){var b="",a=new Uint8Array(buf),n=a.byteLength;for(var i=0;i<n;i++)b+=String.fromCharCode(a[i]);return btoa(b)}
+ async function nativeSharePost(imgUrl,caption,name){
+  var Sh=capPlugin("Share"),Fs=capPlugin("Filesystem");if(!Sh||!Sh.share)return false;
+  try{
+   var opts={text:caption,dialogTitle:"Share post"};
+   if(imgUrl&&Fs&&Fs.writeFile){
+    var r=await fetch(imgUrl),buf=await r.arrayBuffer();
+    var path="share/"+(name||"post.png");
+    await Fs.writeFile({path:path,data:b64(buf),directory:"CACHE",recursive:true});
+    var u=await Fs.getUri({path:path,directory:"CACHE"});
+    if(u&&u.uri)opts.files=[u.uri];
+   }
+   await Sh.share(opts);return true}
+  catch(e){return false}}
+ async function webSharePost(imgUrl,caption,name){
+  try{
+   if(navigator.share&&imgUrl&&window.File&&navigator.canShare){
+    var r=await fetch(imgUrl),b=await r.blob();
+    var f=new File([b],name||"post.png",{type:b.type||"image/png"});
+    if(navigator.canShare({files:[f]})){await navigator.share({files:[f],text:caption});return true}}
+   if(navigator.share){await navigator.share({text:caption});return true}}
+  catch(e){}
+  return false}
+ window.SocialShare={
+  can:function(){return !!(capPlugin("Share")||navigator.share)},
+  post:async function(imgUrl,caption,name){
+   if(await nativeSharePost(imgUrl,caption,name))return "shared";
+   if(await webSharePost(imgUrl,caption,name))return "shared";
+   return "none"},
+  saveImage:async function(imgUrl,name){
+   /* never navigate the app to the image itself: that strands the associate with no way back */
+   if(await nativeSharePost(imgUrl,"",name))return "shared";
+   try{
+    var r=await fetch(imgUrl),b=await r.blob(),u=URL.createObjectURL(b);
+    var a=document.createElement("a");a.href=u;a.download=name||"post.png";a.rel="noopener";
+    document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},4000);
+    return "downloaded"}
+   catch(e){return "none"}}
  };
 
  /* ---------- links inside the app shell ---------- */

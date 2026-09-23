@@ -30,6 +30,8 @@
 	<string>Tier One Outreach reads your contacts so you can pick who to send approved outreach to. Contacts stay on your phone and in your own account.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>The camera scans the QR code from your Fast Track onboarding email to save your unique link.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Saving an approved post to your photos lets you pick it in Instagram or Facebook. The app only adds images, it never reads your library.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

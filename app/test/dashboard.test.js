@@ -67,8 +67,8 @@ const tick = (ms) => new Promise(r => setTimeout(r, ms || 60));
   t.win.showTab('dash');
   await tick(120);
   const tab = t.doc.querySelector('#tabnav [data-t="dash"]');
-  check('a Dashboard tab is added before Account', !!tab && tab.textContent === 'Dashboard' && tab.nextElementSibling.getAttribute('data-t') === 'account');
-  check('choosing it shows the dashboard and marks the tab', t.doc.getElementById('tabDash').style.display === 'block' && tab.className.indexOf('on') >= 0);
+  check('a Numbers tab is added before Account', !!tab && tab.textContent === 'Numbers' && tab.nextElementSibling.getAttribute('data-t') === 'account');
+  check('choosing it shows the numbers and marks the tab', t.doc.getElementById('tabDash').style.display === 'block' && tab.className.indexOf('on') >= 0);
   check('other tabs are hidden', t.doc.getElementById('tabAccount').style.display === 'none');
 
   const txt = t.doc.getElementById('tabDash').textContent;

@@ -31,7 +31,7 @@ const txt = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
 
   // the tab and what it lists
   const tabs = [...t.d.querySelectorAll('#tabnav .tb')].map(b => b.textContent);
-  check('Library is the first tab', tabs[0] === 'Library', tabs.join(','));
+  check('Library is the first tab and all five fit', tabs.join(',') === 'Library,Outreach,Share,Numbers,Account', tabs.join(','));
   check('choosing it shows the library', t.d.getElementById('tabLib').style.display === 'block');
   const cards = [...t.d.querySelectorAll('#tabLib .lcard')];
   check('every piece in the kit is listed', cards.length === 13, cards.length + ' cards');
@@ -42,14 +42,14 @@ const txt = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
   check('a pending card carries neither', !/Z26/.test(txt(cards.find(c => /Awaiting/.test(c.textContent)))));
 
   // filters
-  t.w.libFilter('ch', 'facebook');
+  t.w.libFilter('ch', 'social');
   await tick();
   let shown = [...t.d.querySelectorAll('#tabLib .lcard')];
-  check('the channel filter narrows the list', shown.length === 2 && shown.every(c => /Facebook/.test(c.textContent)), shown.length + '');
+  check('the Posts filter narrows the list to the four captions', shown.length === 4 && shown.every(c => /Facebook|Instagram/.test(c.textContent)), shown.length + '');
   t.w.libFilter('kit', 'cancer');
   await tick();
-  check('the two filters combine', t.d.querySelectorAll('#tabLib .lcard').length === 1);
-  check('filters are remembered on the device', t.w.localStorage.getItem('lib_f_ch') === 'facebook' && t.w.localStorage.getItem('lib_f_kit') === 'cancer');
+  check('the two filters combine', t.d.querySelectorAll('#tabLib .lcard').length === 2);
+  check('filters are remembered on the device', t.w.localStorage.getItem('lib_f_ch') === 'social' && t.w.localStorage.getItem('lib_f_kit') === 'cancer');
 
   // social preview
   t.d.querySelector('#tabLib .lcard').click();
@@ -59,7 +59,7 @@ const txt = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
   check('a post preview shows the stamped image and the caption below it', !!prev.querySelector('.fimg') && /cancer insurance coverage/.test(txt(prev.querySelector('.fcap'))));
   check('it says what gets filled in', /The contact first name, your name, your business mailing address, and your unique link/.test(txt(prev.querySelector('.facts'))));
   const acts = [...prev.querySelectorAll('.acts button')].map(b => b.textContent);
-  check('a post offers send, copy, share and save', acts.join(',') === 'Send to a contact,Copy,Share post,Save image', acts.join(','));
+  check('a post offers send, copy, its own network, save and the share sheet', acts.join(',') === 'Send to a contact,Copy,Post to Facebook,Save image,Share another way', acts.join(','));
   t.w.libClose();
   check('Back closes the preview', !prev.classList.contains('on'));
 
@@ -81,7 +81,7 @@ const txt = (el) => (el ? el.textContent.replace(/\s+/g, ' ').trim() : '');
   check('Copy takes the piece as shown', t.copied.length === 1 && /Hi Sam,/.test(t.copied[0]) && /Z2600718/.test(t.copied[0]));
 
   // a pending piece cannot be sent
-  t.w.libFilter('kit', 'general'); t.w.libFilter('ch', 'facebook');
+  t.w.libFilter('kit', 'general'); t.w.libFilter('ch', 'social');
   await tick();
   t.d.querySelector('#tabLib .lcard').click();
   await tick(200);

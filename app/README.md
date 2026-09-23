@@ -33,11 +33,25 @@ On Windows, `cap sync` finishes for both platforms. Xcode work happens on the Ma
 ## Native bits
 
 * `capacitor.config.ts`: `androidScheme` is `https` so localStorage and the Supabase session behave like the website. iOS stays on the default `capacitor` scheme because WKWebView does not let an app handle `https` itself.
-* iOS permission strings live in `ios/App/App/Info.plist`: `NSContactsUsageDescription`, `NSCameraUsageDescription`.
+* iOS permission strings live in `ios/App/App/Info.plist`: `NSContactsUsageDescription`, `NSCameraUsageDescription`, `NSPhotoLibraryAddUsageDescription`.
+* `NSPhotoLibraryAddUsageDescription` is the add only string. `@capacitor-community/media` saves a post image to the camera roll without naming an album, which on iOS 14 and later asks for add only access. The app never reads the photo library.
 * Android permissions live in `android/app/src/main/AndroidManifest.xml`: `READ_CONTACTS`, `CAMERA`, plus a `queries` block so the app can resolve the mail, messaging and browser apps the send buttons open.
 * `WRITE_CONTACTS` is declared only because the contacts plugin's permission alias covers read and write together. The app never writes a contact.
 * Icons come from `resources/icon-192.png` and `resources/icon-512.png`, built from the Aflac wordmark inside index.html. The native icon sets are already generated: `ios/App/App/Assets.xcassets/AppIcon.appiconset` and the Android mipmap folders.
 * iOS uses Swift Package Manager, not CocoaPods. Capacitor 8 generates `ios/App/CapApp-SPM/Package.swift` and no Podfile.
+
+## Posting to Instagram and Facebook
+
+Instagram will not take a feed post from another app. Anything handed to its share extension opens
+the Stories composer, which is 9:16, so a 1080 square post is scaled up to fill the frame and the
+sides are cropped. There is no URL scheme or API that prefills a feed post with a caption.
+
+So the Post to Instagram and Post to Facebook buttons do the three steps by hand: save the image to
+the camera roll through `@capacitor-community/media`, copy the approved caption, then open the app.
+The associate starts a post, picks the image and pastes. Each card offers only its own network,
+because the Facebook image is 1200x630 and the Instagram image is 1080x1080.
+
+Share another way keeps the plain share sheet for Messages, mail and anything else.
 
 ## Native contacts
 

@@ -1,5 +1,6 @@
-// Tests the social send path in the built index.html: the share sheet, the caption fallback,
-// and that nothing ever navigates the window to the bare image.
+// Tests the social send path in the built index.html: saving to Photos, the three step handoff to
+// Instagram and Facebook, the share sheet, the caption fallback, and that nothing ever navigates
+// the window to the bare image.
 // Run with: npm test  (from app/)
 const fs = require('fs');
 const path = require('path');
@@ -13,6 +14,8 @@ function check(label, cond, extra) {
   if (!cond) process.exitCode = 1;
 }
 
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+let saveResult = 'photos';
 function boot(ua) {
   const shared = [], copied = [], opened = [], navigated = [];
   const dom = new JSDOM(html, { url: 'https://outreach.benefitsotb.com/', runScripts: 'dangerously', pretendToBeVisual: true,
@@ -26,7 +29,7 @@ function boot(ua) {
   w.SocialShare = {
     can: () => true,
     post: (img, caption, name) => { shared.push({ kind: 'post', img, caption, name }); return Promise.resolve('shared'); },
-    saveImage: (img, name) => { shared.push({ kind: 'save', img, name }); return Promise.resolve('shared'); }
+    saveImage: (img, name) => { shared.push({ kind: 'save', img, name }); return Promise.resolve(saveResult); }
   };
   w.__copy = (t) => copied.push(t);
   w.eval('loadSample(); login(); goStep(4); openDrawer(0);');
@@ -42,22 +45,47 @@ const tick = (ms) => new Promise(r => setTimeout(r, ms || 60));
   t.w.eval('showCh("Social", document.querySelectorAll("#chtab button")[2])');
   await tick(200);
   const labels = [...t.d.querySelectorAll('.chpane[data-ch="Social"] button')].map(b => b.textContent.trim());
-  check('Share post leads the social buttons', labels[0] === 'Share post', labels.join(','));
-  check('Save image replaces Download image', labels.indexOf('Save image') > 0 && labels.indexOf('Download image') < 0, labels.join(','));
+  const firstCard = [...t.d.querySelectorAll('.chpane[data-ch="Social"] .card2')][0];
+  const one = [...firstCard.querySelectorAll('button')].map(b => b.textContent.trim());
+  check('a Facebook card offers Facebook, not Instagram', one[0] === 'Post to Facebook' && one.indexOf('Post to Instagram') < 0, one.join(','));
+  const cards = [...t.d.querySelectorAll('.chpane[data-ch="Social"] .card2')];
+  const apps = cards.map(c => [...c.querySelectorAll('button')].map(b => b.textContent.trim()).filter(x => /^Post to /.test(x)).join('|'));
+  check('each card offers only its own network, in kit order', apps.join(',') === 'Post to Facebook,Post to Instagram,Post to Facebook,Post to Instagram', apps.join(','));
+  check('the share sheet is offered last, and there is no Download image', one[one.length - 1] === 'Share another way' && labels.indexOf('Download image') < 0, one.join(','));
+
+  // Post to Instagram on a phone: save the image, copy the caption, then open the app
+  const m = boot(IPHONE);
+  await tick(400);
+  try { m.d.getElementById('hp_ok').click(); } catch (e) {}
+  m.w.eval('showCh("Social", document.querySelectorAll("#chtab button")[2])');
+  await tick(200);
+  m.w.sh('Social', 'ig', 1);
+  await tick(250);
+  check('Post to Instagram saves the image to Photos first', m.shared.length === 1 && m.shared[0].kind === 'save' && /instagram-post\.png$/.test(m.shared[0].img), JSON.stringify(m.shared[0] || {}).slice(0, 120));
+  check('then copies the approved caption', m.copied.length === 1 && (m.copied[0].indexOf(m.w.KIT.captions.general.instagram.lines[0]) >= 0 || m.copied[0].indexOf(m.w.KIT.captions.cancer.instagram.lines[0]) >= 0 || m.copied[0].indexOf(m.w.KIT.captions.general.facebook.lines[0]) >= 0 || m.copied[0].indexOf(m.w.KIT.captions.cancer.facebook.lines[0]) >= 0));
+  check('and tells you the image is in Photos and what to do in the app', /Image saved and caption copied/.test(m.d.getElementById('toast').textContent), m.d.getElementById('toast').textContent);
+  check('it never navigates this window to the image', m.navigated.length === 0, m.navigated.join(','));
+
+  // when the phone cannot save, say so rather than promising a saved image
+  saveResult = 'none';
+  const t3 = boot(IPHONE);
+  await tick(400);
+  try { t3.d.getElementById('hp_ok').click(); } catch (e) {}
+  t3.w.eval('showCh("Social", document.querySelectorAll("#chtab button")[2])');
+  await tick(200);
+  t3.w.sh('Social', 'fb', 0);
+  await tick(250);
+  check('if it cannot reach Photos it says to save the image first', /Save the image first/.test(t3.d.getElementById('toast').textContent), t3.d.getElementById('toast').textContent);
+  saveResult = 'photos';
 
   t.w.sh('Social', 'share', 0);
   await tick(120);
-  check('Share post hands the image and the caption to the share sheet', t.shared.length === 1 && t.shared[0].kind === 'post' && /\.png$/.test(t.shared[0].img) && t.shared[0].caption.length > 40, JSON.stringify(t.shared[0] || {}).slice(0, 120));
-  check('and the caption it shares is the approved caption', t.shared[0].caption.indexOf(t.w.KIT.captions.general.facebook.lines[0]) >= 0 || t.shared[0].caption.indexOf(t.w.KIT.captions.cancer.facebook.lines[0]) >= 0);
+  const post = t.shared.filter(x => x.kind === 'post')[0];
+  check('Share another way still hands the image and caption to the share sheet', !!post && /\.png$/.test(post.img) && post.caption.length > 40, JSON.stringify(post || {}).slice(0, 120));
 
   t.w.sh('Social', 'img', 0);
-  await tick(120);
-  check('Save image goes through the share sheet too', t.shared.length === 2 && t.shared[1].kind === 'save');
-  check('nothing navigates this window to the image', t.navigated.length === 0, t.navigated.join(','));
-
-  t.w.sh('Social', 'ig', 0);
-  await tick(80);
-  check('Instagram copies the caption first', t.copied.length === 1 && t.copied[0].length > 40);
+  await tick(150);
+  check('Save image says it went to Photos', /Saved to your photos/.test(t.d.getElementById('toast').textContent), t.d.getElementById('toast').textContent);
 
   // with no share support at all, it falls back to copy and say so
   const t2 = boot();

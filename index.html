@@ -971,6 +971,8 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
  var SB_URL="https://pytbtuzeeguqgrhszmpr.supabase.co";
  var SB_KEY="sb_publishable_Szeto_ZZUnpZipwMv1VE0A_wyo3RMQp";
  var BUILD=2;
+ var OTP_LENGTH=8;/* must match the Supabase project email OTP length; change the app, never the dashboard */
+ var RESEND_SECONDS=30,resendTimer=null;
  var LINK_KEY="kit_link",ADDR_KEY="kit_addr";
  var SITE_URL="https://outreach.benefitsotb.com/";
  function isApp(){var C=window.Capacitor;return !!(C&&C.isNativePlatform&&C.isNativePlatform())}
@@ -989,31 +991,35 @@ var KIT_TPL="\n<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cel
   box.innerHTML=lh+'<h2>Sign in</h2><p class="sub2">Use the email address Aflac has on file for you. We will send a one time code.</p>'
   +'<div id="cl_step1"><div class="fgrp"><label class="fl">Email</label><div class="lin">'+ico+'<input id="cl_email" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com"></div></div>'
   +'<button class="btn" id="cl_send" style="width:100%;height:50px;font-size:16px" onclick="cloudSendCode()">Send code</button></div>'
-  +'<div id="cl_step2" style="display:none"><div class="fgrp"><label class="fl">6 digit code</label><div class="lin">'+key+'<input id="cl_code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="8" placeholder="123456"></div></div>'
+  +'<div id="cl_step2" style="display:none"><div class="fgrp"><label class="fl">'+OTP_LENGTH+' digit code</label><div class="lin">'+key+'<input id="cl_code" type="text" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" maxlength="'+OTP_LENGTH+'" placeholder="'+"12345678901234567890".slice(0,OTP_LENGTH)+'"></div></div>'
   +'<button class="btn" id="cl_verify" style="width:100%;height:50px;font-size:16px" onclick="cloudVerify()">Sign in</button>'
-  +'<p class="muted" style="font-size:12.5px;text-align:center;margin-top:14px">'+(isApp()?'Enter the 6 digit code from your email. ':'Check your email for the code, or tap the sign in link in that email. ')+'<a href="#" onclick="cloudBack();return false" style="color:#0070A9">Use a different email</a></p></div>'
+  +'<button type="button" id="cl_resend" onclick="cloudResend()" style="display:block;width:100%;margin-top:10px;padding:10px;background:none;border:0;color:#0070A9;font:inherit;font-size:14px;cursor:pointer">Send a new code</button>'
+  +'<p class="muted" style="font-size:12.5px;text-align:center;margin-top:8px">Enter the '+OTP_LENGTH+' digit code from your email. <a href="#" onclick="cloudBack();return false" style="color:#0070A9">Use a different email</a></p></div>'
   +'<div id="cl_step3" style="display:none"><div class="fgrp"><label class="fl">Your name, as it should appear in your emails and texts</label><div class="lin"><input id="cl_name" type="text" autocomplete="name" placeholder="First Last"></div></div>'
   +'<button class="btn" id="cl_namebtn" style="width:100%;height:50px;font-size:16px" onclick="cloudSaveName()">Continue</button></div>'
   +'<p id="cl_msg" class="muted" style="font-size:13px;text-align:center;margin-top:14px;min-height:18px"></p>';
   var e=$("cl_email");if(e){try{e.value=localStorage.getItem("cl_email")||""}catch(x){}e.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudSendCode()})}
   var c=$("cl_code");if(c){c.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudVerify()});
   var lastAuto="";c.addEventListener("input",function(){var v=(c.value||"").replace(/\D/g,"");if(v!==c.value)c.value=v;
-   if(v.length===6&&v!==lastAuto){lastAuto=v;cloudVerify()}})}
+   if(v.length===OTP_LENGTH&&v!==lastAuto){lastAuto=v;cloudVerify()}})}
   var n=$("cl_name");if(n)n.addEventListener("keydown",function(ev){if(ev.key==="Enter")cloudSaveName()});
   var foot=document.querySelector("#login .pane p.muted:last-child");if(foot&&/Prototype/.test(foot.textContent))foot.remove()}
  function friendly(err){var m=(err&&err.message)||String(err||"");
   if(/not_allowlisted|Database error saving new user|saving new user/i.test(m))return "This email is not on the pilot list yet. Ask your MKD or MKT to add you, then try again.";
   if(/rate limit|too many/i.test(m))return "Too many attempts. Wait a minute and try again.";
-  if(/expired|invalid|Token has expired/i.test(m))return "That code did not match or has expired. Send a new code.";
+  if(/expired|invalid|Token has expired/i.test(m))return "That code did not match or has expired. Tap Send a new code and use the newest email.";
   if(/network|fetch/i.test(m))return "No connection. Check your signal and try again.";
   return m||"Something went wrong. Try again."}
  window.cloudBack=function(){show("cl_step1")};
- window.cloudSendCode=async function(){if(!sb){msg("Still loading. Try again in a moment.",true);return}var e=($("cl_email").value||"").trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){msg("Enter a valid email address.",true);return}
-  busy("cl_send",true,"Sending");msg("");
-  try{var r=await sb.auth.signInWithOtp({email:e,options:{shouldCreateUser:true,emailRedirectTo:isApp()?SITE_URL:location.origin+location.pathname}});if(r.error)throw r.error;pendingEmail=e;try{localStorage.setItem("cl_email",e)}catch(x){}show("cl_step2");msg("Code sent to "+e+".");var c=$("cl_code");if(c){c.value="";c.focus()}}
-  catch(err){msg(friendly(err),true)}
-  busy("cl_send",false,"Send code")};
- window.cloudVerify=async function(){var vb=$("cl_verify");if(vb&&vb.disabled)return;var code=($("cl_code").value||"").replace(/\D/g,"");if(code.length<6){msg("Enter the 6 digit code from your email.",true);return}
+ function startCooldown(){var b=$("cl_resend");if(!b)return;clearInterval(resendTimer);var left=RESEND_SECONDS;b.disabled=true;b.style.cursor="default";b.style.opacity=".6";b.textContent="Send a new code ("+left+")";
+  resendTimer=setInterval(function(){left--;if(left<=0){clearInterval(resendTimer);b.disabled=false;b.style.cursor="pointer";b.style.opacity="";b.textContent="Send a new code"}else b.textContent="Send a new code ("+left+")"},1000)}
+ window.cloudResend=function(){var b=$("cl_resend");if(b&&b.disabled)return;return window.cloudSendCode(true)};
+ window.cloudSendCode=async function(resend){resend=resend===true;if(!sb){msg("Still loading. Try again in a moment.",true);return}var e=resend?pendingEmail:($("cl_email").value||"").trim().toLowerCase();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)){msg("Enter a valid email address.",true);return}
+  if(resend){var rb=$("cl_resend");if(rb){rb.disabled=true;rb.textContent="Sending"}}else busy("cl_send",true,"Sending");msg("");
+  try{var r=await sb.auth.signInWithOtp({email:e,options:{shouldCreateUser:true,emailRedirectTo:isApp()?SITE_URL:location.origin+location.pathname}});if(r.error)throw r.error;pendingEmail=e;try{localStorage.setItem("cl_email",e)}catch(x){}show("cl_step2");msg(resend?"New code sent to "+e+". Use the newest email; earlier codes no longer work.":"Code sent to "+e+".");var c=$("cl_code");if(c){c.value="";c.focus()}startCooldown()}
+  catch(err){msg(friendly(err),true);if(resend){var rb2=$("cl_resend");if(rb2){rb2.disabled=false;rb2.textContent="Send a new code"}}}
+  if(!resend)busy("cl_send",false,"Send code")};
+ window.cloudVerify=async function(){var vb=$("cl_verify");if(vb&&vb.disabled)return;var code=($("cl_code").value||"").replace(/\D/g,"");if(code.length<OTP_LENGTH){msg("Enter the "+OTP_LENGTH+" digit code from your email.",true);return}
   busy("cl_verify",true,"Signing in");msg("");
   try{var r=await sb.auth.verifyOtp({email:pendingEmail,token:code,type:"email"});if(r.error)throw r.error;/* onAuthStateChange takes it from here */}
   catch(err){msg(friendly(err),true);busy("cl_verify",false,"Sign in")}};
